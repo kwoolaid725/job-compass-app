@@ -1,0 +1,14 @@
+[theme]
+primaryColor="#FF4B4B"
+secondaryColor="#0083B8"
+successColor="#00C851"
+warningColor="#FFA900"
+infoColor="#2196F3"
+highlightColor="#B39DDB"
+grayColor="#ECEFF1"
+errorColor="#FF4444"
+
+# You can also customize other theme settings
+backgroundColor="#FFFFFF"
+textColor="#262730"
+font="sans serif"

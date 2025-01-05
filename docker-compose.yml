@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15
+    container_name: job_postings
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=sozjavbxj
+      - POSTGRES_DB=job_postings
+    command: ["postgres", "-c", "listen_addresses=*"]  # Force listen on all addresses
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
