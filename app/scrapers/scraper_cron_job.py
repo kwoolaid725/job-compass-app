@@ -1,7 +1,7 @@
 import argparse
 import os
-from indeed_scraper import IndeedScraper
-from linkedin_scraper import LinkedInScraper
+from app.scrapers.indeed_scraper import IndeedScraper
+from app.scrapers.linkedin_scraper import LinkedInScraper
 from dataclasses import dataclass
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
@@ -153,9 +153,9 @@ def main():
         elif args.source == 'linkedin':
             # Configure LinkedIn URLs based on category
             urls = {
-                'python_developer': "https://www.linkedin.com/jobs/search/?keywords=python%20developer&f_TPR=r86400",
-                'data_engineer': "https://www.linkedin.com/jobs/search/?keywords=data%20engineer&f_TPR=r86400",
-                'data_scientist': "https://www.linkedin.com/jobs/search/?keywords=data%20scientist&f_TPR=r86400"
+                'python_developer': "https://www.linkedin.com/jobs/search/?keywords=python%20developer&f_TPR=r604800",
+                'data_engineer': "https://www.linkedin.com/jobs/search/?keywords=data%20engineer&f_TPR=r604800",
+                'data_scientist': "https://www.linkedin.com/jobs/search/?keywords=data%20scientist&f_TPR=r604800"
             }
 
             user_input = UserInput(

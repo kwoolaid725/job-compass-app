@@ -7,12 +7,16 @@ from app.models.job import (
     SalaryType,
     JobType,
     RemoteStatus,
-    JobSource  # Added this import
+    JobSource
 )
 from decimal import Decimal
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import re
 from typing import Dict, Any, Optional, List
+
+# Define Central timezone
+CENTRAL_TZ = ZoneInfo("America/Chicago")
 
 def extract_salary_info(raw_job: RawJobPost) -> dict:
     """Extract salary information from RawJobPost's salary_text column"""
@@ -405,7 +409,7 @@ def process_job_data_linkedin(raw_content: str) -> Dict[str, Any]:
                         time_parts = [part for part in insight.split(' · ') if 'ago' in part]
                         if time_parts:
                             time_str = time_parts[0].strip().lower()
-                            current_time = datetime.now(timezone.utc)
+                            current_time = datetime.now(CENTRAL_TZ)
 
                             if 'week' in time_str:
                                 weeks = int(time_str.split()[0])
@@ -499,7 +503,6 @@ def process_job_data_linkedin(raw_content: str) -> Dict[str, Any]:
 
 
 def process_job_data(raw_content: str) -> Dict[str, Any]:
-    """Process and extract all job information from raw content"""
     try:
         job_details = extract_job_details(raw_content)
 
@@ -508,11 +511,12 @@ def process_job_data(raw_content: str) -> Dict[str, Any]:
             **extract_location_info(job_details.get('location', {})),
         }
 
-        # Extract date
+        # Extract date in Central Time
         if date_published := job_details.get("datePublished"):
+            # Convert timestamp to Central time
             processed_data["date_posted"] = datetime.fromtimestamp(
-                int(date_published) / 1000, tz=timezone.utc
-            )
+                int(date_published) / 1000
+            ).astimezone(CENTRAL_TZ)
 
         # Extract salary from the description text
         if desc_data := job_details.get("description", {}):
@@ -553,8 +557,7 @@ def process_raw_job(db: Session, raw_job: RawJobPost) -> ProcessedJob:
     try:
         if raw_job.source == JobSource.LINKEDIN:
             processed_data = process_job_data_linkedin(raw_job.raw_content)
-            # Add the job URL from the raw_job itself
-            processed_data['job_url'] = raw_job.job_url  # Use the URL directly from raw_job
+            processed_data['job_url'] = raw_job.job_url
         elif raw_job.source == JobSource.INDEED:
             processed_data = process_job_data(raw_job.raw_content)
             if raw_job.salary_text:
@@ -565,7 +568,9 @@ def process_raw_job(db: Session, raw_job: RawJobPost) -> ProcessedJob:
 
         processed_data['raw_job_post_id'] = raw_job.id
 
+        # Create ProcessedJob instance
         db_job = ProcessedJob(**processed_data)
+
         db.add(db_job)
         db.commit()
         db.refresh(db_job)

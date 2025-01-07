@@ -2,8 +2,19 @@
 from enum import Enum
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Numeric, Enum as SQLAlchemyEnum
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
+from sqlalchemy.sql import expression, func
+from sqlalchemy.ext.compiler import compiles
 from app.database import Base
+
+# Custom function for Central timezone
+class ChicagoTime(expression.FunctionElement):
+    type = DateTime()
+    inherit_cache = True
+
+@compiles(ChicagoTime, 'postgresql')
+def pg_chicago_time(element, compiler, **kw):
+    # Using timezone() function which is more reliable in PostgreSQL
+    return "timezone('America/Chicago', CURRENT_TIMESTAMP)"
 
 
 # Define enums
@@ -69,7 +80,7 @@ class RawJobPost(Base):
     raw_content = Column(String, nullable=False)
     source = Column(SQLAlchemyEnum(JobSource), nullable=False)
     job_category = Column(SQLAlchemyEnum(JobCategory), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=ChicagoTime())
     processed = Column(Boolean, default=False)
     salary_text = Column(String, nullable=True)
     salary_from_api = Column(String, nullable=True)  # Add this new column
@@ -113,8 +124,8 @@ class ProcessedJob(Base):
     status = Column(SQLAlchemyEnum(JobStatus), default=JobStatus.NEW, nullable=False)
 
     # Timestamps
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=ChicagoTime())
+    updated_at = Column(DateTime(timezone=True), onupdate=ChicagoTime())
 
     # Relationship
     raw_job_post = relationship("RawJobPost", back_populates="processed_job")
