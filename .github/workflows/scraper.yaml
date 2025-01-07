@@ -1,0 +1,52 @@
+name: Job Scraper
+on:
+  schedule:
+    - cron: '0 */12 * * *'  # Runs every 12 hours
+  workflow_dispatch:  # Allows manual trigger
+
+jobs:
+  scrape-jobs:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - source: "indeed"
+            category: "python_developer"
+          - source: "indeed"
+            category: "data_engineer"
+          - source: "indeed"
+            category: "data_scientist"
+          - source: "linkedin"
+            category: "python_developer"
+          - source: "linkedin"
+            category: "data_engineer"
+          - source: "linkedin"
+            category: "data_scientist"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install playwright playwright-stealth sqlalchemy psycopg2-binary
+          playwright install chromium
+
+      - name: Run scraper for ${{ matrix.source }} - ${{ matrix.category }}
+        env:
+          DATABASE_NAME: ${{ secrets.DATABASE_NAME }}
+          DATABASE_USERNAME: ${{ secrets.DATABASE_USERNAME }}
+          DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
+          DATABASE_HOSTNAME: ${{ secrets.DATABASE_HOSTNAME }}
+          DATABASE_PORT: ${{ secrets.DATABASE_PORT }}
+          LINKEDIN_EMAIL: ${{ secrets.LINKEDIN_EMAIL }}
+          LINKEDIN_PASSWORD: ${{ secrets.LINKEDIN_PASSWORD }}
+        run: |
+          python scraper.py \
+            --source "${{ matrix.source }}" \
+            --category "${{ matrix.category }}"

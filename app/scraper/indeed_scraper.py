@@ -107,7 +107,7 @@ class IndeedScraper:
         with sync_playwright() as p:
             processed_count = 0
             # for start in range(0, 501, 10):
-            for start in range(160, 1000, 10):
+            for start in range(230, 1000, 10):
                 browser, page = self.launch_stealth_browser(p)
                 page_url = f"{self.user_input.url}&start={start}"
                 print(f"\U0001F310 Navigating to {page_url}")
