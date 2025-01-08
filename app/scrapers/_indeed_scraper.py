@@ -46,19 +46,12 @@ class IndeedScraperEnhanced:
         self.logger = logger or logging.getLogger(__name__)
 
     def launch_stealth_browser(self, playwright, headless=True):
-        """Launch a stealth browser with enhanced stealth settings."""
+        """Launch a stealth browser with enhanced WebKit stealth settings."""
         browser = playwright.webkit.launch(
-            headless=headless,  # Use the passed headless parameter
+            headless=headless,
             args=[
-                "--start-maximized",
-                "--enable-webgl",
-                "--disable-blink-features=AutomationControlled",
-                "--disable-blink-features",
-                "--disable-infobars",
                 "--window-size=1920,1080",
-                "--no-sandbox",
-                "--disable-web-security",
-                "--disable-features=IsolateOrigins,site-per-process"
+                "--no-sandbox"
             ]
         )
 
