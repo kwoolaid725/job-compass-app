@@ -291,89 +291,78 @@ class IndeedScraperEnhanced:
             time.sleep(random.uniform(0.5, 1.5))
 
     def handle_verification(self, page):
-        """Handle Cloudflare verification with immediate visual marker"""
+        """Handle Cloudflare verification with immediate visual marker and retry logic"""
         try:
-            # Create screenshots directory and print current directory
             self.logger.info(f"Current working directory: {os.getcwd()}")
             os.makedirs('screenshots', exist_ok=True)
 
-            # Take initial screenshot and verify it exists
-            screenshot_path1 = os.path.join(os.getcwd(), 'screenshots', '1_before_verification.png')
-            page.screenshot(path=screenshot_path1)
-            self.logger.info(f"Screenshot 1 saved: {os.path.exists(screenshot_path1)}")
+            for attempt in range(3):  # Try 3 times
+                self.logger.info(f"Attempt {attempt + 1} of 3")
 
-            # Add red dot marker immediately after page load
-            page_viewport = page.viewport_size
-            self.logger.info(f"Viewport size: {page_viewport}")
-            # Adjust coordinates
-            estimated_x = (page_viewport['width'] / 2) - 123  # Move further left
-            estimated_y = (page_viewport['height'] * 0.17)  # Move slightly up
+                # Take initial screenshot for this attempt
+                screenshot_path1 = os.path.join(os.getcwd(), 'screenshots',
+                                                f'1_before_verification_attempt_{attempt + 1}.png')
+                page.screenshot(path=screenshot_path1)
+                self.logger.info(f"Screenshot 1 saved for attempt {attempt + 1}")
 
-            self.logger.info(f"Estimated coordinates: x={estimated_x}, y={estimated_y}")
+                # Add red dot marker
+                page_viewport = page.viewport_size
+                self.logger.info(f"Viewport size: {page_viewport}")
+                estimated_x = (page_viewport['width'] / 2) - 122
+                estimated_y = (page_viewport['height'] * 0.17)
+                self.logger.info(f"Estimated coordinates: x={estimated_x}, y={estimated_y}")
 
-            # Fixed JavaScript evaluation syntax
-            js_code = """({ x, y }) => {
-                        const dot = document.createElement('div');
-                        dot.style.position = 'fixed';
-                        dot.style.left = (x - 5) + 'px';
-                        dot.style.top = (y - 5) + 'px';
-                        dot.style.width = '10px';
-                        dot.style.height = '10px';
-                        dot.style.backgroundColor = 'red';
-                        dot.style.borderRadius = '50%';
-                        dot.style.zIndex = '2147483647';
-                        document.body.appendChild(dot);
-                    }"""
-            # Correct way to pass arguments to evaluate
-            page.evaluate(js_code, {'x': estimated_x, 'y': estimated_y})
+                # Add red dot
+                js_code = """({ x, y }) => {
+                    const dot = document.createElement('div');
+                    dot.style.position = 'fixed';
+                    dot.style.left = (x - 5) + 'px';
+                    dot.style.top = (y - 5) + 'px';
+                    dot.style.width = '10px';
+                    dot.style.height = '10px';
+                    dot.style.backgroundColor = 'red';
+                    dot.style.borderRadius = '50%';
+                    dot.style.zIndex = '2147483647';
+                    document.body.appendChild(dot);
+                }"""
+                page.evaluate(js_code, {'x': estimated_x, 'y': estimated_y})
 
-            # Take screenshot with marker and verify it exists
-            screenshot_path2 = os.path.join(os.getcwd(), 'screenshots', '2_estimated_location.png')
-            page.screenshot(path=screenshot_path2)
-            self.logger.info(f"Screenshot 2 saved: {os.path.exists(screenshot_path2)}")
+                # Take screenshot with marker
+                screenshot_path2 = os.path.join(os.getcwd(), 'screenshots',
+                                                f'2_estimated_location_attempt_{attempt + 1}.png')
+                page.screenshot(path=screenshot_path2)
+                self.logger.info(f"Screenshot 2 saved for attempt {attempt + 1}")
 
-            # Try clicking at the estimated location
-            page.mouse.click(estimated_x, estimated_y)
-            time.sleep(2)
+                # Try clicking at the estimated location
+                page.mouse.click(estimated_x, estimated_y)
+                time.sleep(2)
 
-            # Take screenshot after click and verify it exists
-            screenshot_path3 = os.path.join(os.getcwd(), 'screenshots', '3_after_click.png')
-            page.screenshot(path=screenshot_path3)
-            self.logger.info(f"Screenshot 3 saved: {os.path.exists(screenshot_path3)}")
+                # Take screenshot after click
+                screenshot_path3 = os.path.join(os.getcwd(), 'screenshots', f'3_after_click_attempt_{attempt + 1}.png')
+                page.screenshot(path=screenshot_path3)
+                self.logger.info(f"Screenshot 3 saved for attempt {attempt + 1}")
 
-            # Print list of files in screenshots directory
-            self.logger.info("Files in screenshots directory:", os.listdir('screenshots'))
-
-            # Cloudflare checkbox selectors
-            verify_selectors = [
-                "input[type='checkbox']",
-                "iframe[title='Widget containing checkbox for hCaptcha security challenge']",
-                "#cf-stage input[type='checkbox']",
-                ".checkbox[name='cf-turnstile']"
-            ]
-
-            for selector in verify_selectors:
+                # Check if verification was successful
                 try:
-                    verify_button = page.wait_for_selector(selector, timeout=5000)
-                    if verify_button:
-                        print(f"🔍 Found verification element: {selector}")
-                        verify_button.click()
-                        time.sleep(random.uniform(2, 4))
-                        page.wait_for_load_state('networkidle', timeout=10000)
-                        return True
-                except Exception as e:
-                    print(f"Failed with selector {selector}: {e}")
-                    continue
+                    # Wait for some indication that verification worked
+                    time.sleep(3)
+                    # Take post-wait screenshot
+                    page.screenshot(path=f'screenshots/4_post_wait_attempt_{attempt + 1}.png')
 
-            # If we get here, we couldn't find the checkbox
-            page.screenshot(path='screenshots/verification_failed.png')
+                    if attempt < 2:  # Don't refresh on the last attempt
+                        self.logger.info(f"Refreshing page for attempt {attempt + 2}")
+                        page.reload()
+                        time.sleep(3)  # Wait for page to load
+                except Exception as e:
+                    self.logger.error(f"Error during attempt {attempt + 1}: {e}")
+
+            self.logger.info("Completed all 3 attempts")
             return False
 
         except Exception as e:
             print(f"Verification error: {e}")
             page.screenshot(path='screenshots/error_state.png')
             return False
-
 
     def extract_job_links(self, page):
         """Extract all job URLs from the main listing page."""
