@@ -173,7 +173,7 @@ class IndeedScraper:
     def launch_stealth_browser(self, playwright):
         """Launch a stealth browser with enhanced stealth settings."""
         browser = playwright.chromium.launch(
-            headless=True,
+            headless=False,
             args=[
                 "--start-maximized",
                 "--enable-webgl",
