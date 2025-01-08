@@ -52,21 +52,40 @@ jobs:
         run: |
           docker-compose up -d
 
-          # Wait and verify services
-          for i in {1..10}; do
-            echo "Checking services (attempt $i)"
-            docker ps
-            docker-compose ps
+          # Extended service check
+          max_attempts=20
+          attempt=0
 
-            # Check FlareSolverr specifically
-            docker inspect flaresolverr
+          while [ $attempt -lt $max_attempts ]; do
+            echo "Checking FlareSolverr service (attempt $((attempt + 1))/$max_attempts)"
+
+            # Check Docker logs for more details
             docker logs flaresolverr
 
-            # Attempt health check
-            curl http://localhost:8191/health || true
+            # Attempt health check with verbose output
+            curl -v http://localhost:8191/health || true
+
+            # Check if service is responsive
+            response=$(curl -s -X POST http://localhost:8191/v1 \
+              -H "Content-Type: application/json" \
+              -d '{"cmd":"test"}')
+
+            echo "FlareSolverr test response: $response"
+
+            # Check if response indicates service is ready
+            if echo "$response" | grep -q "ok"; then
+              echo "FlareSolverr service is ready"
+              break
+            fi
 
             sleep 15
+            attempt=$((attempt + 1))
           done
+
+          if [ $attempt -eq $max_attempts ]; then
+            echo "FlareSolverr failed to become ready after $max_attempts attempts"
+            exit 1
+          fi
 
       - name: Check Service Readiness
         run: |

@@ -58,70 +58,57 @@ class IndeedScraperEnhanced:
         payload = {
             "cmd": "request.get",
             "url": url,
-            "maxTimeout": 60000
+            "maxTimeout": 180000,  # 3 minutes
+            "returnOnlySolution": False,  # Get full response details
+            "sessions": True  # Maintain browser session
         }
 
         for attempt in range(max_retries):
             try:
-                self.logger.info(f"FlareSolverr request attempt {attempt + 1}")
+                self.logger.info(f"FlareSolverr request attempt {attempt + 1} for URL: {url}")
 
-                with httpx.Client(timeout=httpx.Timeout(60.0, connect=10.0)) as client:
+                with httpx.Client(
+                        timeout=httpx.Timeout(
+                            connect=30.0,  # Longer connection timeout
+                            read=180.0,  # 3 minute read timeout
+                            write=30.0  # Longer write timeout
+                        )
+                ) as client:
                     response = client.post(
                         url=self.flaresolverr_url,
                         headers=r_headers,
-                        json=payload
+                        json=payload,
+                        follow_redirects=True
                     )
 
                     # Log full response for debugging
-                    full_response = response.text
-                    self.logger.info(f"Full FlareSolverr response: {full_response}")
+                    self.logger.info(f"FlareSolverr response status: {response.status_code}")
+                    full_response_text = response.text
+                    self.logger.info(f"Full FlareSolverr response: {full_response_text}")
 
                     response.raise_for_status()
 
                     response_data = response.json()
 
-                    if response_data.get('solution', {}).get('response'):
-                        return response_data['solution']['response']
+                    # More detailed logging
+                    self.logger.info(f"FlareSolverr response keys: {response_data.keys()}")
 
-                    self.logger.warning(f"FlareSolverr did not return a valid response: {response_data}")
+                    # Check for a valid solution
+                    if response_data.get('solution'):
+                        solution = response_data['solution']
+                        if solution.get('response'):
+                            self.logger.info("Successfully retrieved FlareSolverr solution")
+                            return solution['response']
+                        else:
+                            self.logger.warning(f"No response in solution: {solution}")
+                    else:
+                        self.logger.warning(f"No solution in response: {response_data}")
 
             except (httpx.RequestError, httpx.HTTPStatusError) as e:
                 self.logger.error(f"FlareSolverr request error (attempt {attempt + 1}): {e}")
 
-                # Additional diagnostics
-                try:
-                    import subprocess
-
-                    # Log Docker container status
-                    try:
-                        result = subprocess.run(
-                            ['docker', 'inspect', 'flaresolverr'],
-                            capture_output=True,
-                            text=True
-                        )
-                        self.logger.info(f"FlareSolverr container details: {result.stdout}")
-                    except Exception as docker_inspect_error:
-                        self.logger.error(f"Docker inspect error: {docker_inspect_error}")
-
-                    # Log container logs
-                    try:
-                        result = subprocess.run(
-                            ['docker', 'logs', 'flaresolverr'],
-                            capture_output=True,
-                            text=True
-                        )
-                        self.logger.info(f"FlareSolverr container logs: {result.stdout}")
-                    except Exception as docker_logs_error:
-                        self.logger.error(f"Docker logs error: {docker_logs_error}")
-
-                except Exception as diag_error:
-                    self.logger.error(f"Diagnostics error: {diag_error}")
-
-                # Wait between retries
-                time.sleep(5)
-
-            except Exception as e:
-                self.logger.error(f"Unexpected FlareSolverr error: {e}")
+                # Wait between retries with exponential backoff
+                time.sleep(30 * (attempt + 1))
 
         # Fallback if all attempts fail
         self.logger.error("All FlareSolverr attempts failed")

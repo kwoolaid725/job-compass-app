@@ -20,10 +20,12 @@ services:
     ports:
       - "8191:8191"
     environment:
-      - LOG_LEVEL=debug  # More verbose logging
-      - LOG_HTML=true    # Log HTML for debugging
+      - LOG_LEVEL=debug
+      - LOG_HTML=true
       - TZ=Europe/London
-    restart: always  # Ensure it always restarts
+      - CAPTCHA_SOLVER=none  # Disable CAPTCHA solving
+      - MAX_TIMEOUT=180000   # Increase max timeout to 3 minutes
+    restart: always
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8191/health"]
       interval: 30s
