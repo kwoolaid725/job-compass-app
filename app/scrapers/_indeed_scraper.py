@@ -49,10 +49,7 @@ class IndeedScraperEnhanced:
         """Launch a stealth browser with enhanced WebKit stealth settings."""
         browser = playwright.webkit.launch(
             headless=headless,
-            args=[
-                "--window-size=1920,1080",
-                "--no-sandbox"
-            ]
+
         )
 
         context = browser.new_context(
