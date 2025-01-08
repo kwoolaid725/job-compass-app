@@ -3,10 +3,17 @@ name: Job Scraper
 on:
   schedule:
     - cron: '0 */12 * * *'  # Runs every 12 hours
-  workflow_dispatch:  # Allows manual trigger
+  workflow_dispatch:  # Allows manual trigger with parameters
+
+    inputs:
+      run_all:
+        description: 'Run all scrapers in one batch'
+        required: false
+        default: false  # Default: false (for individual runs)
 
 jobs:
   scrape-jobs:
+    if: ${{ inputs.run_all == 'false' }}  # Run individual scrapers unless run_all is true
     runs-on: ubuntu-latest
 
     strategy:
@@ -39,7 +46,6 @@ jobs:
           pip install playwright playwright-stealth sqlalchemy psycopg2-binary
           playwright install chromium
 
-      # Run for individual combinations (based on matrix)
       - name: Run scraper for ${{ matrix.source }} - ${{ matrix.category }}
         env:
           DATABASE_NAME: ${{ secrets.DATABASE_NAME }}
@@ -54,15 +60,8 @@ jobs:
             --source "${{ matrix.source }}" \
             --category "${{ matrix.category }}" --max_pages 10
 
-      # Upload logs for individual scraper runs
-      - name: Upload logs
-        if: always()  # Upload logs even if a step fails
-        uses: actions/upload-artifact@v3
-        with:
-          name: scraper-logs-${{ matrix.source }}-${{ matrix.category }}
-          path: logs/scraper.log
-
   run-all-scrapers:
+    if: ${{ inputs.run_all == 'true' }}  # Run only if run_all is triggered
     runs-on: ubuntu-latest
 
     steps:
@@ -79,8 +78,7 @@ jobs:
           pip install playwright playwright-stealth sqlalchemy psycopg2-binary
           playwright install chromium
 
-      # Run all combinations in one batch
-      - name: Run all combinations
+      - name: Run all combinations in one batch
         env:
           DATABASE_NAME: ${{ secrets.DATABASE_NAME }}
           DATABASE_USERNAME: ${{ secrets.DATABASE_USERNAME }}
@@ -91,11 +89,3 @@ jobs:
           LINKEDIN_PASSWORD: ${{ secrets.LINKEDIN_PASSWORD }}
         run: |
           python -m app.scrapers.scraper_main --run_all --max_pages 10
-
-      # Upload logs for the full batch run
-      - name: Upload batch run logs
-        if: always()  # Upload logs even if the step fails
-        uses: actions/upload-artifact@v3
-        with:
-          name: scraper-logs-batch-run
-          path: logs/scraper.log
