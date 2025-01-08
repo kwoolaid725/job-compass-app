@@ -113,78 +113,91 @@ class IndeedScraperEnhanced:
             time.sleep(random.uniform(0.008, 0.015))  # Subtle speed variations
 
     def handle_verification(self, page):
-        """Enhanced verification handling with natural mouse movements."""
-        verification_selectors = [
-            "button[value='Verify you are human']",
-            "input[value='Verify you are human']",
-            "#challenge-button",
-            "[data-action='verify']",
-            ".captcha-container",
-            "#px-captcha",
-            ".g-recaptcha"
-        ]
-
+        """Handle 'Verify Human' button with screenshots at each step"""
         try:
-            # Take initial screenshot
-            page.screenshot(path='verification_before.png')
+            # Create screenshots directory if it doesn't exist
+            os.makedirs('screenshots', exist_ok=True)
 
-            for selector in verification_selectors:
+            # Take initial page screenshot
+            page.screenshot(path='screenshots/1_initial_page.png')
+            print("📸 Captured initial page state")
+
+            # List of verification selectors
+            verify_selectors = [
+                "button[value='Verify you are human']",
+                "input[value='Verify you are human']",
+                "#challenge-button",
+                "[data-action='verify']"
+            ]
+
+            for selector in verify_selectors:
                 try:
-                    # Wait for element with timeout
-                    element = page.wait_for_selector(selector, timeout=5000)
-                    if element:
-                        self.logger.info(f"🤖 Found verification element: {selector}")
+                    # Wait briefly for the selector
+                    verify_button = page.wait_for_selector(selector, timeout=5000)
+                    if verify_button:
+                        print(f"🔍 Found verification button with selector: {selector}")
 
-                        # Get element position
-                        box = element.bounding_box()
+                        # Take screenshot before any interaction
+                        page.screenshot(path='screenshots/2_found_button.png')
+                        print("📸 Captured verification button state")
+
+                        # Get button position
+                        box = verify_button.bounding_box()
                         if box:
-                            # Calculate center of element
-                            target_x = box['x'] + box['width'] / 2
-                            target_y = box['y'] + box['height'] / 2
+                            # Mark the button location with a red dot
+                            page.evaluate("""(x, y) => {
+                                const dot = document.createElement('div');
+                                dot.style.position = 'absolute';
+                                dot.style.left = (x - 5) + 'px';
+                                dot.style.top = (y - 5) + 'px';
+                                dot.style.width = '10px';
+                                dot.style.height = '10px';
+                                dot.style.backgroundColor = 'red';
+                                dot.style.borderRadius = '50%';
+                                dot.style.zIndex = '10000';
+                                document.body.appendChild(dot);
+                            }""", box['x'] + box['width'] / 2, box['y'] + box['height'] / 2)
 
-                            # Add visual marker for debugging
-                            page.evaluate("""
-                                (x, y) => {
-                                    const dot = document.createElement('div');
-                                    dot.style.position = 'absolute';
-                                    dot.style.left = (x - 5) + 'px';
-                                    dot.style.top = (y - 5) + 'px';
-                                    dot.style.width = '10px';
-                                    dot.style.height = '10px';
-                                    dot.style.backgroundColor = 'red';
-                                    dot.style.borderRadius = '50%';
-                                    dot.style.zIndex = '10000';
-                                    document.body.appendChild(dot);
-                                }
-                            """, target_x, target_y)
+                            # Take screenshot with the red dot
+                            page.screenshot(path='screenshots/3_marked_button.png')
+                            print("📸 Captured marked verification button")
 
-                            # Take screenshot with marker
-                            page.screenshot(path='verification_target.png')
+                            # Move mouse to button naturally
+                            page.mouse.move(
+                                box['x'] + box['width'] / 2 + random.uniform(-10, 10),
+                                box['y'] + box['height'] / 2 + random.uniform(-10, 10),
+                                steps=random.randint(10, 20)
+                            )
 
-                            # Simulate human-like mouse movement
-                            self.move_mouse_naturally(page, target_x, target_y)
+                            time.sleep(random.uniform(0.5, 1.0))
 
-                            # Random delay before clicking
-                            time.sleep(random.uniform(0.3, 0.7))
+                            # Click the button
+                            verify_button.click()
+                            print("🖱️ Clicked verification button")
 
-                            # Click with random delay
-                            element.click(delay=random.uniform(50, 150))
-
-                            # Wait for possible page changes
                             time.sleep(random.uniform(2, 4))
+
+                            # Take screenshot after clicking
+                            page.screenshot(path='screenshots/4_after_click.png')
+                            print("📸 Captured post-click state")
+
+                            # Wait for page to load after verification
                             page.wait_for_load_state('networkidle', timeout=10000)
-
-                            # Take after screenshot
-                            page.screenshot(path='verification_after.png')
-
                             return True
                 except Exception as e:
-                    self.logger.error(f"Error with selector {selector}: {e}")
+                    print(f"⚠️ Error with selector {selector}: {e}")
                     continue
 
+            # Take screenshot if no button found
+            page.screenshot(path='screenshots/no_button_found.png')
+            print("📸 Captured page state (no button found)")
             return False
+
         except Exception as e:
-            self.logger.error(f"Verification handling error: {e}")
+            print(f"❌ Error in verification handling: {e}")
+            # Take error state screenshot
+            page.screenshot(path='screenshots/error_state.png')
+            print("📸 Captured error state")
             return False
 
 
@@ -195,6 +208,7 @@ class IndeedScraperEnhanced:
         Enhanced scraping run method with headless mode
         """
         with sync_playwright() as p:
+            os.makedirs('screenshots', exist_ok=True)
             for start in range(0, self.max_pages * 10, 10):
                 # Use headless mode directly
                 browser, page = self.launch_stealth_browser(p, headless=True)
@@ -202,16 +216,14 @@ class IndeedScraperEnhanced:
                 self.logger.info(f"🌐 Navigating to page {start // 10 + 1}")
 
                 try:
-                    # Ensure the screenshots directory exists
-                    os.makedirs('screenshots', exist_ok=True)
 
                     # Navigate to page
                     page.goto(page_url, timeout=60000)
 
-                    screenshot_path = 'indeed_page_load.png'
-                    page.screenshot(path=screenshot_path)
-
-                    self.logger.info(f"Screenshot saved to {screenshot_path}")
+                    # screenshot_path = 'indeed_page_load.png'
+                    # page.screenshot(path=screenshot_path)
+                    #
+                    # self.logger.info(f"Screenshot saved to {screenshot_path}")
 
                     time.sleep(random.uniform(1, 3))
 
