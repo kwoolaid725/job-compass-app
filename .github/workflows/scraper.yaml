@@ -61,7 +61,7 @@ jobs:
             --category "${{ matrix.category }}" --max_pages 10
 
   run-all-scrapers:
-    if: ${{ inputs.run_all == 'true' }}  # Run only if run_all is triggered
+    if: ${{ inputs.run_all == 'true' }} # Run only if run_all is triggered
     runs-on: ubuntu-latest
 
     steps:
