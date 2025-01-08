@@ -305,9 +305,9 @@ class IndeedScraperEnhanced:
             # Add red dot marker immediately after page load
             page_viewport = page.viewport_size
             self.logger.info(f"Viewport size: {page_viewport}")
-            # Adjusted coordinates for the red dot to hit the circle left of "Verification"
-            estimated_x = (page_viewport['width'] / 2) - 100
-            estimated_y = (page_viewport['height'] * 0.2)
+            # Adjust coordinates
+            estimated_x = (page_viewport['width'] / 2) - 120  # Move further left
+            estimated_y = (page_viewport['height'] * 0.18)  # Move slightly up
 
             self.logger.info(f"Estimated coordinates: x={estimated_x}, y={estimated_y}")
 
