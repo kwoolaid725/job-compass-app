@@ -72,6 +72,6 @@ jobs:
         with:
           name: indeed-scraper-screenshots
           path: |
+            screenshots/**/*.png
             *.png
-            screenshots/*.png
           if-no-files-found: warn

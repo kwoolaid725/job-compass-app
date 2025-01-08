@@ -293,39 +293,52 @@ class IndeedScraperEnhanced:
     def handle_verification(self, page):
         """Handle Cloudflare verification with immediate visual marker"""
         try:
-            # Create screenshots directory
+            # Create screenshots directory and print current directory
+            self.logger.info("Current working directory:", os.getcwd())
             os.makedirs('screenshots', exist_ok=True)
 
-            # Take initial screenshot
-            page.screenshot(path='screenshots/1_before_verification.png')
+            # Take initial screenshot and verify it exists
+            screenshot_path1 = os.path.join(os.getcwd(), 'screenshots', '1_before_verification.png')
+            page.screenshot(path=screenshot_path1)
+            self.logger.info(f"Screenshot 1 saved: {os.path.exists(screenshot_path1)}")
 
             # Add red dot marker immediately after page load
-            # Estimating Cloudflare checkbox position (center-ish of the page, slightly above middle)
             page_viewport = page.viewport_size
+            self.logger.info(f"Viewport size: {page_viewport}")
             estimated_x = page_viewport['width'] / 2
-            estimated_y = (page_viewport['height'] * 0.4)  # 40% down from top
+            estimated_y = (page_viewport['height'] * 0.4)
+            self.logger.info(f"Estimated coordinates: x={estimated_x}, y={estimated_y}")
 
             # Add red dot marker at estimated position
             page.evaluate("""(x, y) => {
                 const dot = document.createElement('div');
-                dot.style.position = 'fixed';  // Changed to fixed to ensure visibility
+                dot.style.position = 'fixed';
                 dot.style.left = (x - 5) + 'px';
                 dot.style.top = (y - 5) + 'px';
                 dot.style.width = '10px';
                 dot.style.height = '10px';
                 dot.style.backgroundColor = 'red';
                 dot.style.borderRadius = '50%';
-                dot.style.zIndex = '2147483647';  // Maximum z-index
+                dot.style.zIndex = '2147483647';
                 document.body.appendChild(dot);
             }""", estimated_x, estimated_y)
 
-            # Take screenshot with marker immediately
-            page.screenshot(path='screenshots/2_estimated_location.png')
+            # Take screenshot with marker and verify it exists
+            screenshot_path2 = os.path.join(os.getcwd(), 'screenshots', '2_estimated_location.png')
+            page.screenshot(path=screenshot_path2)
+            self.logger.info(f"Screenshot 2 saved: {os.path.exists(screenshot_path2)}")
 
             # Try clicking at the estimated location
             page.mouse.click(estimated_x, estimated_y)
             time.sleep(2)
-            page.screenshot(path='screenshots/3_after_click.png')
+
+            # Take screenshot after click and verify it exists
+            screenshot_path3 = os.path.join(os.getcwd(), 'screenshots', '3_after_click.png')
+            page.screenshot(path=screenshot_path3)
+            self.logger.info(f"Screenshot 3 saved: {os.path.exists(screenshot_path3)}")
+
+            # Print list of files in screenshots directory
+            self.logger.info("Files in screenshots directory:", os.listdir('screenshots'))
 
             # Cloudflare checkbox selectors
             verify_selectors = [
