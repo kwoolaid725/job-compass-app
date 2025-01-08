@@ -305,23 +305,25 @@ class IndeedScraperEnhanced:
             # Add red dot marker immediately after page load
             page_viewport = page.viewport_size
             self.logger.info(f"Viewport size: {page_viewport}")
-            estimated_x = (page_viewport['width'] / 2) - 85  # Moved right to hit the verifying circle
-            estimated_y = (page_viewport['height'] * 0.22)  # Keep same height
+            # Adjusted coordinates for the red dot to hit the circle left of "Verification"
+            estimated_x = (page_viewport['width'] / 2) - 100
+            estimated_y = (page_viewport['height'] * 0.2)
+
             self.logger.info(f"Estimated coordinates: x={estimated_x}, y={estimated_y}")
 
             # Fixed JavaScript evaluation syntax
             js_code = """({ x, y }) => {
-                const dot = document.createElement('div');
-                dot.style.position = 'fixed';
-                dot.style.left = (x - 5) + 'px';
-                dot.style.top = (y - 5) + 'px';
-                dot.style.width = '10px';
-                dot.style.height = '10px';
-                dot.style.backgroundColor = 'red';
-                dot.style.borderRadius = '50%';
-                dot.style.zIndex = '2147483647';
-                document.body.appendChild(dot);
-            }"""
+                        const dot = document.createElement('div');
+                        dot.style.position = 'fixed';
+                        dot.style.left = (x - 5) + 'px';
+                        dot.style.top = (y - 5) + 'px';
+                        dot.style.width = '10px';
+                        dot.style.height = '10px';
+                        dot.style.backgroundColor = 'red';
+                        dot.style.borderRadius = '50%';
+                        dot.style.zIndex = '2147483647';
+                        document.body.appendChild(dot);
+                    }"""
             # Correct way to pass arguments to evaluate
             page.evaluate(js_code, {'x': estimated_x, 'y': estimated_y})
 
