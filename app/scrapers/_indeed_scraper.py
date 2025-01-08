@@ -306,8 +306,8 @@ class IndeedScraperEnhanced:
             page_viewport = page.viewport_size
             self.logger.info(f"Viewport size: {page_viewport}")
             # Adjust coordinates
-            estimated_x = (page_viewport['width'] / 2) - 120  # Move further left
-            estimated_y = (page_viewport['height'] * 0.18)  # Move slightly up
+            estimated_x = (page_viewport['width'] / 2) - 123  # Move further left
+            estimated_y = (page_viewport['height'] * 0.17)  # Move slightly up
 
             self.logger.info(f"Estimated coordinates: x={estimated_x}, y={estimated_y}")
 
