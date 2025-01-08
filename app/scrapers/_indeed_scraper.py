@@ -305,8 +305,8 @@ class IndeedScraperEnhanced:
             # Add red dot marker immediately after page load
             page_viewport = page.viewport_size
             self.logger.info(f"Viewport size: {page_viewport}")
-            estimated_x = page_viewport['width'] / 2
-            estimated_y = (page_viewport['height'] * 0.4)
+            estimated_x = (page_viewport['width'] / 2) - 100  # Move left from center by 100px
+            estimated_y = (page_viewport['height'] * 0.25)  # Changed from 0.4 to 0.25 to move higher
             self.logger.info(f"Estimated coordinates: x={estimated_x}, y={estimated_y}")
 
             # Fixed JavaScript evaluation syntax
