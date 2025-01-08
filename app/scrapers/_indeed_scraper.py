@@ -333,8 +333,13 @@ class IndeedScraperEnhanced:
                 page.screenshot(path=screenshot_path2)
                 self.logger.info(f"Screenshot 2 saved for attempt {attempt + 1}")
 
-                # Try clicking at the estimated location
-                page.mouse.click(estimated_x, estimated_y)
+                # Move mouse naturally to the target
+                self.move_mouse_naturally(page, estimated_x, estimated_y)
+                time.sleep(random.uniform(0.3, 0.7))
+
+                # Click with force and delay
+                page.mouse.click(estimated_x, estimated_y, delay=random.uniform(50, 150))
+                self.logger.info(f"Clicked at x={estimated_x}, y={estimated_y}")
                 time.sleep(2)
 
                 # Take screenshot after click
