@@ -53,10 +53,12 @@ jobs:
           docker-compose up -d
           # Wait for services to be fully up
           sleep 30
-          # Verify running containers
+          # Network debugging
+          docker network ls
           docker ps
-          # Check logs of specific services if needed
-          docker logs flaresolverr
+          ip addr
+          netstat -tuln
+          curl http://localhost:8191/health || echo "FlareSolverr health check failed"
 
       - name: Debug Environment
         run: |
@@ -68,6 +70,9 @@ jobs:
           docker-compose ps
 
       - name: Run Enhanced Indeed Scraper Test
+        env:
+          # Ensure the scraper uses localhost
+          FLARESOLVERR_URL: http://localhost:8191/v1
         run: |
           xvfb-run --auto-servernum --server-args="-screen 0 1280x960x24" python -m app.scrapers.scraper_main --test-indeed
 

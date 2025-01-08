@@ -34,7 +34,7 @@ class UserInput:
 
 class IndeedScraperEnhanced:
     def __init__(self, user_input: UserInput,
-                 flaresolverr_url: str = 'http://flaresolverr:8191/v1',
+                 flaresolverr_url: str = 'http://localhost:8191/v1',
                  max_pages: int = 10,
                  existing_urls: Optional[set] = None,
                  job_source: Optional[JobSource] = None,
@@ -62,6 +62,17 @@ class IndeedScraperEnhanced:
         }
 
         try:
+            import socket
+
+            # Additional network diagnostics
+            try:
+                socket.setdefaulttimeout(10)
+                socket.create_connection(("localhost", 8191), timeout=10)
+                self.logger.info("Successfully connected to localhost:8191")
+            except Exception as conn_error:
+                self.logger.error(f"Connection to localhost:8191 failed: {conn_error}")
+                return None
+
             with httpx.Client(timeout=60.0) as client:
                 self.logger.info(f"Attempting to send request to FlareSolverr at {self.flaresolverr_url}")
 
@@ -81,14 +92,31 @@ class IndeedScraperEnhanced:
             self.logger.error(f"Error sending request to FlareSolverr: {e}")
             self.logger.error(f"FlareSolverr URL used: {self.flaresolverr_url}")
 
-            # Additional system-level diagnostics
+            # Extensive error logging
             try:
-                import socket
-                hostname = self.flaresolverr_url.split('//')[1].split(':')[0]
-                ip = socket.gethostbyname(hostname)
-                self.logger.info(f"Hostname {hostname} resolves to IP: {ip}")
-            except Exception as dns_error:
-                self.logger.error(f"DNS resolution error: {dns_error}")
+                import subprocess
+
+                # Run network diagnostics
+                self.logger.info("Running network diagnostics:")
+
+                # Check if port is open
+                try:
+                    result = subprocess.run(['nc', '-zv', 'localhost', '8191'],
+                                            capture_output=True, text=True, timeout=10)
+                    self.logger.info(f"Port check result: {result.stdout} {result.stderr}")
+                except Exception as port_check_error:
+                    self.logger.error(f"Port check error: {port_check_error}")
+
+                # Check service status
+                try:
+                    result = subprocess.run(['docker', 'ps'],
+                                            capture_output=True, text=True, timeout=10)
+                    self.logger.info(f"Docker containers: {result.stdout}")
+                except Exception as docker_ps_error:
+                    self.logger.error(f"Docker PS error: {docker_ps_error}")
+
+            except Exception as diag_error:
+                self.logger.error(f"Diagnostics error: {diag_error}")
 
             return None
         except json.JSONDecodeError as e:
@@ -250,28 +278,24 @@ class IndeedScraperEnhanced:
             return False
 
     def run(self):
-        """
-        Enhanced scraping run method with FlareSolverr integration
-        """
         with sync_playwright() as p:
             os.makedirs('screenshots', exist_ok=True)
             for start in range(0, self.max_pages * 10, 10):
-                # Use headless mode directly
-                browser, page = self.launch_stealth_browser(p, headless=True)
+                browser, page = self.launch_stealth_browser(p, headless=False)
                 page_url = f"{self.user_input.url}&start={start}"
                 self.logger.info(f"🌐 Navigating to page {start // 10 + 1}")
 
                 try:
-                    # Use FlareSolverr to get page content
+                    # Try FlareSolverr first
                     flaresolverr_content = self.send_flaresolverr_request(page_url)
 
                     if not flaresolverr_content:
-                        self.logger.error(f"❌ Failed to retrieve content for {page_url}")
-                        browser.close()
-                        continue
-
+                        self.logger.warning("FlareSolverr failed, falling back to direct navigation")
+                        page.goto(page_url, timeout=60000)
+                    else:
+                        page.set_content(flaresolverr_content)
                     # Set the content from FlareSolverr instead of navigating
-                    page.set_content(flaresolverr_content)
+
                     page.wait_for_load_state('networkidle', timeout=10000)
 
                     # Take initial screenshot
