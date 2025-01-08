@@ -291,13 +291,41 @@ class IndeedScraperEnhanced:
             time.sleep(random.uniform(0.5, 1.5))
 
     def handle_verification(self, page):
-        """Handle Cloudflare verification with visual marker"""
+        """Handle Cloudflare verification with immediate visual marker"""
         try:
             # Create screenshots directory
             os.makedirs('screenshots', exist_ok=True)
 
             # Take initial screenshot
             page.screenshot(path='screenshots/1_before_verification.png')
+
+            # Add red dot marker immediately after page load
+            # Estimating Cloudflare checkbox position (center-ish of the page, slightly above middle)
+            page_viewport = page.viewport_size
+            estimated_x = page_viewport['width'] / 2
+            estimated_y = (page_viewport['height'] * 0.4)  # 40% down from top
+
+            # Add red dot marker at estimated position
+            page.evaluate("""(x, y) => {
+                const dot = document.createElement('div');
+                dot.style.position = 'fixed';  // Changed to fixed to ensure visibility
+                dot.style.left = (x - 5) + 'px';
+                dot.style.top = (y - 5) + 'px';
+                dot.style.width = '10px';
+                dot.style.height = '10px';
+                dot.style.backgroundColor = 'red';
+                dot.style.borderRadius = '50%';
+                dot.style.zIndex = '2147483647';  // Maximum z-index
+                document.body.appendChild(dot);
+            }""", estimated_x, estimated_y)
+
+            # Take screenshot with marker immediately
+            page.screenshot(path='screenshots/2_estimated_location.png')
+
+            # Try clicking at the estimated location
+            page.mouse.click(estimated_x, estimated_y)
+            time.sleep(2)
+            page.screenshot(path='screenshots/3_after_click.png')
 
             # Cloudflare checkbox selectors
             verify_selectors = [
@@ -309,63 +337,13 @@ class IndeedScraperEnhanced:
 
             for selector in verify_selectors:
                 try:
-                    # First check if we need to handle iframe
-                    iframes = page.frames
-                    main_frame = page
-
-                    for frame in iframes:
-                        if "turnstile" in frame.url or "cloudflare" in frame.url:
-                            main_frame = frame
-                            break
-
-                    # Wait for the checkbox
-                    checkbox = main_frame.wait_for_selector(selector, timeout=5000)
-
-                    if checkbox:
-                        # Get the position
-                        box = checkbox.bounding_box()
-                        if box:
-                            # Calculate center
-                            center_x = box['x'] + box['width'] / 2
-                            center_y = box['y'] + box['height'] / 2
-
-                            # Add red dot marker
-                            page.evaluate("""(x, y) => {
-                                const dot = document.createElement('div');
-                                dot.style.position = 'absolute';
-                                dot.style.left = (x - 5) + 'px';
-                                dot.style.top = (y - 5) + 'px';
-                                dot.style.width = '10px';
-                                dot.style.height = '10px';
-                                dot.style.backgroundColor = 'red';
-                                dot.style.borderRadius = '50%';
-                                dot.style.zIndex = '10000';
-                                document.body.appendChild(dot);
-                            }""", center_x, center_y)
-
-                            # Take screenshot with marker
-                            page.screenshot(path='screenshots/2_marker_location.png')
-
-                            # Move mouse naturally
-                            page.mouse.move(
-                                center_x + random.uniform(-5, 5),
-                                center_y + random.uniform(-5, 5),
-                                steps=random.randint(10, 20)
-                            )
-
-                            time.sleep(random.uniform(0.3, 0.7))
-
-                            # Click the checkbox
-                            checkbox.click(delay=random.uniform(50, 150))
-
-                            # Wait for verification
-                            time.sleep(2)
-                            page.screenshot(path='screenshots/3_after_click.png')
-
-                            # Wait for potential redirect or page change
-                            page.wait_for_load_state('networkidle', timeout=10000)
-                            return True
-
+                    verify_button = page.wait_for_selector(selector, timeout=5000)
+                    if verify_button:
+                        print(f"🔍 Found verification element: {selector}")
+                        verify_button.click()
+                        time.sleep(random.uniform(2, 4))
+                        page.wait_for_load_state('networkidle', timeout=10000)
+                        return True
                 except Exception as e:
                     print(f"Failed with selector {selector}: {e}")
                     continue
