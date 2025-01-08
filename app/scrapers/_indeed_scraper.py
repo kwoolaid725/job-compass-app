@@ -34,7 +34,7 @@ class UserInput:
 
 class IndeedScraperEnhanced:
     def __init__(self, user_input: UserInput,
-                 flaresolverr_url: str = 'http://localhost:8191/v1',
+                 flaresolverr_url: str = 'http://flaresolverr:8191/v1',
                  max_pages: int = 10,
                  existing_urls: Optional[set] = None,
                  job_source: Optional[JobSource] = None,
@@ -54,9 +54,7 @@ class IndeedScraperEnhanced:
 
     def send_flaresolverr_request(self, url: str):
         """Send a GET request with FlareSolverr using httpx"""
-        # Basic header content type header
         r_headers = {"Content-Type": "application/json"}
-        # Request payload
         payload = {
             "cmd": "request.get",
             "url": url,
@@ -64,17 +62,15 @@ class IndeedScraperEnhanced:
         }
 
         try:
-            # Send the POST request using httpx
             with httpx.Client(timeout=60.0) as client:
+                self.logger.info(f"Attempting to send request to FlareSolverr at {self.flaresolverr_url}")
+
                 response = client.post(url=self.flaresolverr_url, headers=r_headers, json=payload)
 
-                # Check if request was successful
                 response.raise_for_status()
 
-                # Parse the JSON response
                 response_data = response.json()
 
-                # Check if solution exists in the response
                 if response_data.get('solution', {}).get('response'):
                     return response_data['solution']['response']
 
@@ -83,6 +79,17 @@ class IndeedScraperEnhanced:
 
         except httpx.RequestError as e:
             self.logger.error(f"Error sending request to FlareSolverr: {e}")
+            self.logger.error(f"FlareSolverr URL used: {self.flaresolverr_url}")
+
+            # Additional system-level diagnostics
+            try:
+                import socket
+                hostname = self.flaresolverr_url.split('//')[1].split(':')[0]
+                ip = socket.gethostbyname(hostname)
+                self.logger.info(f"Hostname {hostname} resolves to IP: {ip}")
+            except Exception as dns_error:
+                self.logger.error(f"DNS resolution error: {dns_error}")
+
             return None
         except json.JSONDecodeError as e:
             self.logger.error(f"Error parsing FlareSolverr response: {e}")
