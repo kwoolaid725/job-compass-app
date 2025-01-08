@@ -64,6 +64,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.actions.txt
           playwright install chromium
+          # Add these for X server
+          sudo apt-get update
+          sudo apt-get install -y xvfb
       - name: Run all scrapers
         env:
           DATABASE_NAME: ${{ secrets.DATABASE_NAME }}
@@ -74,4 +77,4 @@ jobs:
           LINKEDIN_EMAIL: ${{ secrets.LINKEDIN_EMAIL }}
           LINKEDIN_PASSWORD: ${{ secrets.LINKEDIN_PASSWORD }}
         run: |
-          python -m app.scrapers.scraper_main --run_all --max_pages 10
+          xvfb-run --auto-servernum python -m app.scrapers.scraper_main --run_all --max_pages 10
