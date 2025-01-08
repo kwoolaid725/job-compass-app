@@ -12,6 +12,7 @@ from sqlalchemy.sql import text
 import re
 from app.crud.job_queries import find_indeed_duplicates_batch
 import logging
+import math
 
 # Enhanced User-Agents list
 user_agents = [
@@ -76,184 +77,118 @@ class IndeedScraperEnhanced:
         stealth_sync(page)
         return browser, page
 
+    def generate_bezier_curve(self, start_x, start_y, end_x, end_y, control_points=2):
+        """Generate points along a bezier curve for natural mouse movement."""
+        points = [(start_x, start_y)]
+
+        # Generate random control points
+        for _ in range(control_points):
+            points.append((
+                start_x + random.uniform(0, end_x - start_x),
+                start_y + random.uniform(0, end_y - start_y)
+            ))
+        points.append((end_x, end_y))
+
+        return points
+
+    def move_mouse_naturally(self, page, end_x, end_y):
+        """Move mouse in a natural curve to target coordinates."""
+        current_x = random.randint(100, 800)  # Random start position
+        current_y = random.randint(100, 600)
+
+        points = self.generate_bezier_curve(current_x, current_y, end_x, end_y)
+        steps = random.randint(25, 40)
+
+        for i in range(steps):
+            t = i / steps
+            x = y = 0
+            n = len(points) - 1
+
+            for j, point in enumerate(points):
+                coefficient = math.comb(n, j) * (1 - t) ** (n - j) * t ** j
+                x += coefficient * point[0]
+                y += coefficient * point[1]
+
+            page.mouse.move(x, y)
+            time.sleep(random.uniform(0.008, 0.015))  # Subtle speed variations
+
     def handle_verification(self, page):
-        """
-        Advanced verification handling with multiple strategies
-        """
-        verification_strategies = [
-            # Indeed-specific verification selectors
-            {
-                'selectors': [
-                    "button[value='Verify you are human']",
-                    "input[value='Verify you are human']",
-                    "#challenge-button",
-                    "[data-action='verify']",
-                    ".captcha-container",
-                    "#px-captcha",
-                    ".g-recaptcha"
-                ],
-                'action': self._handle_captcha
-            },
-            {
-                'selectors': [
-                    ".challenge-modal",
-                    "[role='dialog'][aria-label='Verification']",
-                    "#challenge-container"
-                ],
-                'action': self._handle_challenge_modal
-            }
+        """Enhanced verification handling with natural mouse movements."""
+        verification_selectors = [
+            "button[value='Verify you are human']",
+            "input[value='Verify you are human']",
+            "#challenge-button",
+            "[data-action='verify']",
+            ".captcha-container",
+            "#px-captcha",
+            ".g-recaptcha"
         ]
 
         try:
-            for strategy in verification_strategies:
-                for selector in strategy['selectors']:
-                    try:
-                        # Check for verification element
-                        verification_element = page.query_selector(selector)
+            # Take initial screenshot
+            page.screenshot(path='verification_before.png')
 
-                        if verification_element:
-                            self.logger.warning(f"🤖 Verification detected: {selector}")
+            for selector in verification_selectors:
+                try:
+                    # Wait for element with timeout
+                    element = page.wait_for_selector(selector, timeout=5000)
+                    if element:
+                        self.logger.info(f"🤖 Found verification element: {selector}")
 
-                            # Take a screenshot for debugging
-                            page.screenshot(path='indeed_verification.png')
+                        # Get element position
+                        box = element.bounding_box()
+                        if box:
+                            # Calculate center of element
+                            target_x = box['x'] + box['width'] / 2
+                            target_y = box['y'] + box['height'] / 2
 
-                            # Apply the specific handling strategy
-                            result = strategy['action'](page, verification_element)
+                            # Add visual marker for debugging
+                            page.evaluate("""
+                                (x, y) => {
+                                    const dot = document.createElement('div');
+                                    dot.style.position = 'absolute';
+                                    dot.style.left = (x - 5) + 'px';
+                                    dot.style.top = (y - 5) + 'px';
+                                    dot.style.width = '10px';
+                                    dot.style.height = '10px';
+                                    dot.style.backgroundColor = 'red';
+                                    dot.style.borderRadius = '50%';
+                                    dot.style.zIndex = '10000';
+                                    document.body.appendChild(dot);
+                                }
+                            """, target_x, target_y)
 
-                            if result:
-                                return True
-                    except Exception as e:
-                        self.logger.error(f"Error handling {selector}: {e}")
+                            # Take screenshot with marker
+                            page.screenshot(path='verification_target.png')
+
+                            # Simulate human-like mouse movement
+                            self.move_mouse_naturally(page, target_x, target_y)
+
+                            # Random delay before clicking
+                            time.sleep(random.uniform(0.3, 0.7))
+
+                            # Click with random delay
+                            element.click(delay=random.uniform(50, 150))
+
+                            # Wait for possible page changes
+                            time.sleep(random.uniform(2, 4))
+                            page.wait_for_load_state('networkidle', timeout=10000)
+
+                            # Take after screenshot
+                            page.screenshot(path='verification_after.png')
+
+                            return True
+                except Exception as e:
+                    self.logger.error(f"Error with selector {selector}: {e}")
+                    continue
 
             return False
         except Exception as e:
             self.logger.error(f"Verification handling error: {e}")
             return False
 
-    def _handle_captcha(self, page, element):
-        """
-        Handle CAPTCHA challenges with advanced techniques
-        """
-        try:
-            # Sophisticated CAPTCHA handling strategies
-            strategies = [
-                self._attempt_auto_solve,
-                self._simulate_human_interaction,
-                self._request_new_challenge
-            ]
 
-            for strategy in strategies:
-                if strategy(page, element):
-                    return True
 
-            return False
-        except Exception as e:
-            self.logger.error(f"CAPTCHA handling error: {e}")
-            return False
-
-    def _attempt_auto_solve(self, page, element):
-        """
-        Attempt to automatically solve or bypass CAPTCHA
-        """
-        try:
-            # Sophisticated auto-solve techniques
-            page.evaluate("""
-                // Attempt to remove or hide CAPTCHA overlay
-                () => {
-                    const captchaElements = document.querySelectorAll('.captcha-container, #px-captcha, .g-recaptcha');
-                    captchaElements.forEach(el => {
-                        el.style.display = 'none';
-                        el.remove();
-                    });
-                    return true;
-                }
-            """)
-
-            # Simulate a click or interaction
-            element.click(force=True, delay=random.uniform(0.5, 1.5))
-
-            time.sleep(random.uniform(2, 4))
-            return True
-        except Exception as e:
-            self.logger.error(f"Auto-solve attempt failed: {e}")
-            return False
-
-    def _simulate_human_interaction(self, page, element):
-        """
-        Simulate human-like interaction with CAPTCHA
-        """
-        try:
-            # Random mouse movements around the element
-            bbox = element.bounding_box()
-            if bbox:
-                page.mouse.move(
-                    bbox['x'] + bbox['width'] / 2,
-                    bbox['y'] + bbox['height'] / 2
-                )
-
-                # Random mouse actions
-                for _ in range(random.randint(2, 5)):
-                    page.mouse.move(
-                        bbox['x'] + random.uniform(-50, 50),
-                        bbox['y'] + random.uniform(-50, 50)
-                    )
-                    time.sleep(random.uniform(0.3, 0.7))
-
-            return True
-        except Exception as e:
-            self.logger.error(f"Human interaction simulation failed: {e}")
-            return False
-
-    def _request_new_challenge(self, page, element):
-        """
-        Request a new verification challenge
-        """
-        try:
-            # Find and click refresh/reload buttons
-            refresh_selectors = [
-                "button[aria-label='Refresh']",
-                "button[title='Get a new challenge']",
-                ".captcha-refresh"
-            ]
-
-            for selector in refresh_selectors:
-                refresh_btn = page.query_selector(selector)
-                if refresh_btn:
-                    refresh_btn.click(force=True)
-                    time.sleep(random.uniform(2, 4))
-                    return True
-
-            return False
-        except Exception as e:
-            self.logger.error(f"Challenge refresh failed: {e}")
-            return False
-
-    def _handle_challenge_modal(self, page, element):
-        """
-        Handle challenge modals with advanced techniques
-        """
-        try:
-            # Attempt to close or bypass modal
-            close_strategies = [
-                lambda: page.evaluate("""
-                    () => {
-                        const modals = document.querySelectorAll('.challenge-modal, [role="dialog"]');
-                        modals.forEach(modal => modal.remove());
-                        return true;
-                    }
-                """),
-                lambda: element.click(force=True)
-            ]
-
-            for strategy in close_strategies:
-                if strategy():
-                    time.sleep(random.uniform(1, 3))
-                    return True
-
-            return False
-        except Exception as e:
-            self.logger.error(f"Challenge modal handling error: {e}")
-            return False
 
     def run(self):
         """
