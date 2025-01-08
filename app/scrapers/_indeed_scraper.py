@@ -296,8 +296,8 @@ class IndeedScraperEnhanced:
             self.logger.info(f"Current working directory: {os.getcwd()}")
             os.makedirs('screenshots', exist_ok=True)
 
-            for attempt in range(3):  # Try 3 times
-                self.logger.info(f"Attempt {attempt + 1} of 3")
+            for attempt in range(3):  # Try 3 refresh attempts
+                self.logger.info(f"Refresh attempt {attempt + 1} of 3")
 
                 # Take initial screenshot for this attempt
                 screenshot_path1 = os.path.join(os.getcwd(), 'screenshots',
@@ -333,33 +333,36 @@ class IndeedScraperEnhanced:
                 page.screenshot(path=screenshot_path2)
                 self.logger.info(f"Screenshot 2 saved for attempt {attempt + 1}")
 
-                # Move mouse naturally to the target
-                self.move_mouse_naturally(page, estimated_x, estimated_y)
-                time.sleep(random.uniform(0.3, 0.7))
+                # Multiple clicks per refresh attempt
+                num_clicks = random.randint(3, 5)
+                for click_num in range(num_clicks):
+                    self.logger.info(f"Click {click_num + 1} of {num_clicks} in attempt {attempt + 1}")
 
-                # Click with force and delay
-                page.mouse.click(estimated_x, estimated_y, delay=random.uniform(50, 150))
-                self.logger.info(f"Clicked at x={estimated_x}, y={estimated_y}")
-                time.sleep(5)
+                    # Move mouse naturally to the target
+                    self.move_mouse_naturally(page, estimated_x, estimated_y)
+                    time.sleep(random.uniform(0.5, 1.0))
 
-                # Take screenshot after click
-                screenshot_path3 = os.path.join(os.getcwd(), 'screenshots', f'3_after_click_attempt_{attempt + 1}.png')
-                page.screenshot(path=screenshot_path3)
-                self.logger.info(f"Screenshot 3 saved for attempt {attempt + 1}")
+                    # Click with force and delay
+                    page.mouse.click(estimated_x, estimated_y, delay=random.uniform(50, 150))
+                    self.logger.info(f"Clicked at x={estimated_x}, y={estimated_y}")
+                    time.sleep(3)  # Longer wait between clicks
 
-                # Check if verification was successful
-                try:
-                    # Wait for some indication that verification worked
-                    time.sleep(3)
-                    # Take post-wait screenshot
-                    page.screenshot(path=f'screenshots/4_post_wait_attempt_{attempt + 1}.png')
+                    # Take screenshot after each click
+                    screenshot_path3 = os.path.join(os.getcwd(), 'screenshots',
+                                                    f'3_after_click_{click_num + 1}_attempt_{attempt + 1}.png')
+                    page.screenshot(path=screenshot_path3)
+                    self.logger.info(f"Screenshot saved after click {click_num + 1}")
 
-                    if attempt < 2:  # Don't refresh on the last attempt
-                        self.logger.info(f"Refreshing page for attempt {attempt + 2}")
-                        page.reload()
-                        time.sleep(3)  # Wait for page to load
-                except Exception as e:
-                    self.logger.error(f"Error during attempt {attempt + 1}: {e}")
+                # Longer wait after all clicks
+                time.sleep(10)  # Wait longer to see if verification worked
+
+                # Take final screenshot for this attempt
+                page.screenshot(path=f'screenshots/4_post_wait_attempt_{attempt + 1}.png')
+
+                if attempt < 2:  # Don't refresh on the last attempt
+                    self.logger.info(f"Refreshing page for attempt {attempt + 2}")
+                    page.reload()
+                    time.sleep(5)  # Longer wait after refresh
 
             self.logger.info("Completed all 3 attempts")
             return False
