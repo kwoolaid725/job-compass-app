@@ -7,19 +7,17 @@ on:
         description: 'Run all scrapers at once'
         required: false
         default: 'false'
+  schedule:
+    - cron: '0 0 * * *'  # Runs daily at midnight
 
 jobs:
   scrape-jobs:
     if: ${{ inputs.run_all != 'true' }}
     runs-on: ubuntu-latest
-    env:  # Add environment variables at the job level
-      DATABASE_NAME: ${{ secrets.DATABASE_NAME }}
-      DATABASE_USERNAME: ${{ secrets.DATABASE_USERNAME }}
-      DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
-      DATABASE_HOSTNAME: ${{ secrets.DATABASE_HOSTNAME }}
-      DATABASE_PORT: ${{ secrets.DATABASE_PORT }}
+    env:
       LINKEDIN_EMAIL: ${{ secrets.LINKEDIN_EMAIL }}
       LINKEDIN_PASSWORD: ${{ secrets.LINKEDIN_PASSWORD }}
+      # Add any other necessary environment variables
 
     strategy:
       matrix:
@@ -28,60 +26,64 @@ jobs:
             category: "python_developer"
           - source: "indeed"
             category: "data_engineer"
+          - source: "indeed"
+            category: "data_scientist"
           - source: "linkedin"
             category: "python_developer"
           - source: "linkedin"
             category: "data_engineer"
+          - source: "linkedin"
+            category: "data_scientist"
 
     steps:
       - uses: actions/checkout@v4
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
+      - name: Install system dependencies
         run: |
-          python -m pip install --upgrade pip setuptools
-          pip install -r requirements.actions.txt
+          sudo apt-get update
+          sudo apt-get install -y \
+            xvfb \
+            libnss3 \
+            libxss1 \
+            libatk-bridge2.0-0 \
+            libgbm-dev \
+            libgtk-3-0 \
+            libxshmfence-dev
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install pytest playwright python-dotenv
           playwright install chromium
-          sudo apt-get update && sudo apt-get install -y xvfb
+          pip install -r requirements.actions.txt
 
-      - name: Debug environment variables
+      - name: Debug Environment
         run: |
-          echo "Database Host: $DATABASE_HOSTNAME"
-          echo "Database Port: $DATABASE_PORT"
-          echo "LinkedIn Email: $LINKEDIN_EMAIL"
-          echo "LinkedIn Password Length: ${#LINKEDIN_PASSWORD} characters"
+          echo "Python version:"
+          python --version
+          echo "Playwright version:"
+          pip show playwright
 
-      - name: Run scraper for ${{ matrix.source }} - ${{ matrix.category }}
+      - name: Run ${{ matrix.source }} Scraper for ${{ matrix.category }}
+        env:
+          LINKEDIN_EMAIL: ${{ secrets.LINKEDIN_EMAIL }}
+          LINKEDIN_PASSWORD: ${{ secrets.LINKEDIN_PASSWORD }}
         run: |
-          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python -m app.scrapers.scraper_main --source "${{ matrix.source }}" --category "${{ matrix.category }}" --max_pages 10
+          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python -m app.main --source "${{ matrix.source }}" --category "${{ matrix.category }}" --max_pages 10
 
-  run-all-scrapers:
-    if: ${{ inputs.run_all == 'true' }}
-    runs-on: ubuntu-latest
-    env:
-      DATABASE_NAME: ${{ secrets.DATABASE_NAME }}
-      DATABASE_USERNAME: ${{ secrets.DATABASE_USERNAME }}
-      DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
-      DATABASE_HOSTNAME: ${{ secrets.DATABASE_HOSTNAME }}
-      DATABASE_PORT: ${{ secrets.DATABASE_PORT }}
-      LINKEDIN_EMAIL: ${{ secrets.LINKEDIN_EMAIL }}
-      LINKEDIN_PASSWORD: ${{ secrets.LINKEDIN_PASSWORD }}
-
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - name: Upload scraper artifacts
+        uses: actions/upload-artifact@v3
+        if: failure()
         with:
-          python-version: '3.11'
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip setuptools
-          pip install -r requirements.actions.txt
-          playwright install chromium
-          sudo apt-get update && sudo apt-get install -y xvfb
-      - name: Run all scrapers
-        run: |
-          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python -m app.scrapers.scraper_main --run_all --max_pages 10
+          name: scraper-artifacts-${{ matrix.source }}-${{ matrix.category }}
+          path: |
+            logs/
+            *.log
+            *.png
+          retention-days: 3
+
