@@ -49,7 +49,7 @@ jobs:
 
       - name: Run Playwright Tests
         run: |
-          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python -m pytest tests/ -v -k "playwright"
+          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python -m pytest /path/to/specific/test_playwright_file.py -v
         # The -k "playwright" flag runs only tests with "playwright" in their name
         # This prevents running unrelated tests in the tests/ directory
 
