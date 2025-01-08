@@ -51,37 +51,66 @@ jobs:
       - name: Start Docker services
         run: |
           docker-compose up -d
-
+          
           # Extended service check
           max_attempts=20
           attempt=0
-
+          
           while [ $attempt -lt $max_attempts ]; do
             echo "Checking FlareSolverr service (attempt $((attempt + 1))/$max_attempts)"
-
-            # Check Docker logs for more details
+          
+            # Verbose network diagnostics
+            docker network inspect job-compass_job_network
+          
+            # Check Docker container details
+            docker inspect flaresolverr
+          
+            # Check Docker logs
             docker logs flaresolverr
-
-            # Attempt health check with verbose output
-            curl -v http://localhost:8191/health || true
-
-            # Check if service is responsive
-            response=$(curl -s -X POST http://localhost:8191/v1 \
+          
+            # Network debugging
+            docker run --network job-compass_job_network curlimages/curl \
+              -v http://flaresolverr:8191/health || true
+          
+            # Try direct Docker container exec health check
+            docker exec flaresolverr curl -v http://localhost:8191/health || true
+          
+            # Attempt to ping the container
+            docker run --network job-compass_job_network \
+              nicolaka/netshoot ping -c 4 flaresolverr || true
+          
+            # Check port listening
+            docker run --network job-compass_job_network \
+              nicolaka/netshoot nc -zv flaresolverr 8191 || true
+          
+            # Advanced network troubleshooting
+            docker run --network job-compass_job_network \
+              nicolaka/netshoot /bin/sh -c "
+                ip addr;
+                ip route;
+                cat /etc/resolv.conf;
+                ping -c 4 flaresolverr;
+                nc -zv flaresolverr 8191
+              " || true
+          
+            # Test connectivity using Docker network
+            response=$(docker run --network job-compass_job_network \
+              curlimages/curl -s -X POST http://flaresolverr:8191/v1 \
               -H "Content-Type: application/json" \
               -d '{"cmd":"test"}')
-
+          
             echo "FlareSolverr test response: $response"
-
+          
             # Check if response indicates service is ready
             if echo "$response" | grep -q "ok"; then
               echo "FlareSolverr service is ready"
               break
             fi
-
+          
             sleep 15
             attempt=$((attempt + 1))
           done
-
+          
           if [ $attempt -eq $max_attempts ]; then
             echo "FlareSolverr failed to become ready after $max_attempts attempts"
             exit 1

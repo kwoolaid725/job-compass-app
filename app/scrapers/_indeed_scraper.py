@@ -53,64 +53,72 @@ class IndeedScraperEnhanced:
         self.logger = logger or logging.getLogger(__name__)
 
     def send_flaresolverr_request(self, url: str, max_retries: int = 3):
-        """Send a GET request with FlareSolverr using httpx with retries"""
+        """Send a GET request with FlareSolverr using httpx with extensive error handling"""
         r_headers = {"Content-Type": "application/json"}
         payload = {
             "cmd": "request.get",
             "url": url,
             "maxTimeout": 180000,  # 3 minutes
-            "returnOnlySolution": False,  # Get full response details
-            "sessions": True  # Maintain browser session
+            "returnOnlySolution": False,
+            "sessions": True
         }
 
         for attempt in range(max_retries):
             try:
-                self.logger.info(f"FlareSolverr request attempt {attempt + 1} for URL: {url}")
+                # Extensive logging
+                self.logger.info(f"FlareSolverr URL: {self.flaresolverr_url}")
+                self.logger.info(f"Payload: {json.dumps(payload)}")
 
-                with httpx.Client(
-                        timeout=httpx.Timeout(
-                            connect=30.0,  # Longer connection timeout
-                            read=180.0,  # 3 minute read timeout
-                            write=30.0  # Longer write timeout
-                        )
-                ) as client:
-                    response = client.post(
-                        url=self.flaresolverr_url,
-                        headers=r_headers,
-                        json=payload,
-                        follow_redirects=True
-                    )
+                # Try multiple connection methods
+                connection_methods = [
+                    'http://localhost:8191/v1',
+                    'http://127.0.0.1:8191/v1',
+                    'http://flaresolverr:8191/v1'
+                ]
 
-                    # Log full response for debugging
-                    self.logger.info(f"FlareSolverr response status: {response.status_code}")
-                    full_response_text = response.text
-                    self.logger.info(f"Full FlareSolverr response: {full_response_text}")
+                last_error = None
+                for connection_url in connection_methods:
+                    try:
+                        with httpx.Client(
+                                timeout=httpx.Timeout(
+                                    connect=30.0,
+                                    read=180.0,
+                                    write=30.0
+                                )
+                        ) as client:
+                            response = client.post(
+                                url=connection_url,
+                                headers=r_headers,
+                                json=payload,
+                                follow_redirects=True
+                            )
 
-                    response.raise_for_status()
+                            # Log connection details
+                            self.logger.info(f"Using connection URL: {connection_url}")
+                            self.logger.info(f"Response status: {response.status_code}")
 
-                    response_data = response.json()
+                            response.raise_for_status()
 
-                    # More detailed logging
-                    self.logger.info(f"FlareSolverr response keys: {response_data.keys()}")
+                            response_data = response.json()
 
-                    # Check for a valid solution
-                    if response_data.get('solution'):
-                        solution = response_data['solution']
-                        if solution.get('response'):
-                            self.logger.info("Successfully retrieved FlareSolverr solution")
-                            return solution['response']
-                        else:
-                            self.logger.warning(f"No response in solution: {solution}")
-                    else:
-                        self.logger.warning(f"No solution in response: {response_data}")
+                            # Validate response
+                            if response_data.get('solution', {}).get('response'):
+                                return response_data['solution']['response']
 
-            except (httpx.RequestError, httpx.HTTPStatusError) as e:
+                            self.logger.warning(f"Invalid response from {connection_url}: {response_data}")
+
+                    except Exception as conn_error:
+                        self.logger.error(f"Error with {connection_url}: {conn_error}")
+                        last_error = conn_error
+
+                # If all connection methods fail
+                if last_error:
+                    raise last_error
+
+            except Exception as e:
                 self.logger.error(f"FlareSolverr request error (attempt {attempt + 1}): {e}")
-
-                # Wait between retries with exponential backoff
                 time.sleep(30 * (attempt + 1))
 
-        # Fallback if all attempts fail
         self.logger.error("All FlareSolverr attempts failed")
         return None
 

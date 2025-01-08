@@ -13,6 +13,8 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    networks:
+      - job_network
 
   flaresolverr:
     image: ghcr.io/flaresolverr/flaresolverr:latest
@@ -23,14 +25,13 @@ services:
       - LOG_LEVEL=debug
       - LOG_HTML=true
       - TZ=Europe/London
-      - CAPTCHA_SOLVER=none  # Disable CAPTCHA solving
-      - MAX_TIMEOUT=180000   # Increase max timeout to 3 minutes
     restart: always
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8191/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
+    networks:
+      - job_network
+
+networks:
+  job_network:
+    driver: bridge
 
 volumes:
   pgdata:
