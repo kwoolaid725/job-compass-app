@@ -46,18 +46,26 @@ class IndeedScraperEnhanced:
         self.logger = logger or logging.getLogger(__name__)
 
     def launch_stealth_browser(self, playwright, headless=True):
-        """Launch a stealth browser with enhanced WebKit stealth settings."""
-        browser = playwright.webkit.launch(
+        """Launch a stealth browser with enhanced Chromium stealth settings."""
+        browser = playwright.chromium.launch(
             headless=headless,
-
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-accelerated-2d-canvas",
+                "--no-first-run",
+                "--disable-gpu",
+                "--window-size=1920,1080"
+            ]
         )
 
         context = browser.new_context(
             user_agent=random.choice(user_agents),
+            viewport={'width': 1920, 'height': 1080},
             java_script_enabled=True,
             permissions=["clipboard-read"],
-            viewport={'width': 1920, 'height': 1080},
-            screen={'width': 1920, 'height': 1080},
             has_touch=False,
             is_mobile=False,
             color_scheme='light',
@@ -249,7 +257,7 @@ class IndeedScraperEnhanced:
 
     def run(self):
         """
-        Enhanced scraping run method with advanced verification handling
+        Enhanced scraping run method with screenshot capture
         """
         with sync_playwright() as p:
             for start in range(0, self.max_pages * 10, 10):
@@ -260,6 +268,10 @@ class IndeedScraperEnhanced:
 
                 try:
                     page.goto(page_url, timeout=60000)
+
+                    # Take a screenshot immediately after page load
+                    page.screenshot(path='indeed_page_load.png')
+
                     time.sleep(random.uniform(1, 3))
 
                     # Advanced verification handling
@@ -271,6 +283,7 @@ class IndeedScraperEnhanced:
 
                     if not job_links:
                         self.logger.error("❌ No job links found")
+                        page.screenshot(path='indeed_no_links.png')
                         browser.close()
                         break
 
