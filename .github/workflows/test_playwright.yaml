@@ -25,18 +25,6 @@ jobs:
           pip install pytest playwright
           playwright install chromium
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            xvfb \
-            libnss3 \
-            libxss1 \
-            libasound2 \
-            libatk-bridge2.0-0 \
-            libgbm-dev \
-            libgtk-3-0 \
-            libxshmfence-dev
 
       - name: Debug Environment
         run: |
