@@ -294,7 +294,7 @@ class IndeedScraperEnhanced:
         """Handle Cloudflare verification with immediate visual marker"""
         try:
             # Create screenshots directory and print current directory
-            self.logger.info("Current working directory:", os.getcwd())
+            self.logger.info(f"Current working directory: {os.getcwd()}")
             os.makedirs('screenshots', exist_ok=True)
 
             # Take initial screenshot and verify it exists
@@ -309,8 +309,8 @@ class IndeedScraperEnhanced:
             estimated_y = (page_viewport['height'] * 0.4)
             self.logger.info(f"Estimated coordinates: x={estimated_x}, y={estimated_y}")
 
-            # Add red dot marker at estimated position
-            page.evaluate("""(x, y) => {
+            # Fixed JavaScript evaluation syntax
+            js_code = """({ x, y }) => {
                 const dot = document.createElement('div');
                 dot.style.position = 'fixed';
                 dot.style.left = (x - 5) + 'px';
@@ -321,7 +321,10 @@ class IndeedScraperEnhanced:
                 dot.style.borderRadius = '50%';
                 dot.style.zIndex = '2147483647';
                 document.body.appendChild(dot);
-            }""", estimated_x, estimated_y)
+            }"""
+
+            # Correct way to pass arguments to evaluate
+            page.evaluate(js_code, {'x': estimated_x, 'y': estimated_y})
 
             # Take screenshot with marker and verify it exists
             screenshot_path2 = os.path.join(os.getcwd(), 'screenshots', '2_estimated_location.png')
