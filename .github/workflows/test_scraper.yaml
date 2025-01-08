@@ -58,14 +58,11 @@ jobs:
         run: |
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python -m app.scrapers.scraper_main --test-indeed
 
-      - name: Upload test artifacts
+      - name: Upload screenshots
         uses: actions/upload-artifact@v3
         if: failure()
         with:
-          name: enhanced-indeed-scraper-test-artifacts
+          name: indeed-scraper-screenshots
           path: |
-            logs/
-            *.log
             *.png
-            indeed_verification.png
           retention-days: 3
