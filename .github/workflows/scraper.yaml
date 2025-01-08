@@ -58,9 +58,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install --upgrade setuptools wheel
-          python -m pip install importlib-metadata
-          python -m pip install playwright playwright-stealth==1.0.6 sqlalchemy psycopg2-binary python-dotenv
+          python -m pip install -r requirements.actions.txt
           playwright install chromium
       - name: Run all scrapers
         env:
