@@ -45,7 +45,8 @@ jobs:
           echo "Playwright version:"
           pip show playwright
           echo "Installed browsers:"
-          playwright list-browsers
+          python -m playwright install-browsers
+          python -m playwright show-browsers
 
       - name: Run Playwright Tests
         run: |
