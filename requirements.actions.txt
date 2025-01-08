@@ -1,4 +1,6 @@
-playwright==1.49.1
+setuptools==59.6.0  # Last version with pkg_resources included
+playwright==1.39.0
 playwright-stealth==1.0.6
-psycopg2-binary==2.9.10
-python-dotenv==1.0.1
+sqlalchemy
+psycopg2-binary
+python-dotenv
