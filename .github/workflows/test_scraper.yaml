@@ -56,7 +56,7 @@ jobs:
 
       - name: Run Enhanced Indeed Scraper Test
         run: |
-          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python -m app.scrapers.scraper_main --test-indeed
+          python -m app.scrapers.scraper_main --test-indeed
 
       - name: Upload screenshots
         uses: actions/upload-artifact@v3

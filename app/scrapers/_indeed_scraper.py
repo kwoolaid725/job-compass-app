@@ -257,23 +257,30 @@ class IndeedScraperEnhanced:
 
     def run(self):
         """
-        Enhanced scraping run method with screenshot capture
+        Enhanced scraping run method with headless mode
         """
         with sync_playwright() as p:
             for start in range(0, self.max_pages * 10, 10):
-                # Launch browser with non-headless mode for better verification handling
+                # Use headless mode directly
                 browser, page = self.launch_stealth_browser(p, headless=True)
                 page_url = f"{self.user_input.url}&start={start}"
                 self.logger.info(f"🌐 Navigating to page {start // 10 + 1}")
 
                 try:
+                    # Ensure the screenshots directory exists
+                    os.makedirs('screenshots', exist_ok=True)
+
+                    # Navigate to page
                     page.goto(page_url, timeout=60000)
 
-                    # Take a screenshot immediately after page load
-                    page.screenshot(path='indeed_page_load.png')
+                    # Take a screenshot
+                    screenshot_path = 'screenshots/indeed_page_load.png'
+                    page.screenshot(path=screenshot_path)
+                    self.logger.info(f"Screenshot saved to {screenshot_path}")
 
                     time.sleep(random.uniform(1, 3))
 
+                    # Rest of the existing logic remains the same
                     # Advanced verification handling
                     if self.handle_verification(page):
                         self.logger.info("✅ Verification challenge bypassed")
@@ -283,7 +290,7 @@ class IndeedScraperEnhanced:
 
                     if not job_links:
                         self.logger.error("❌ No job links found")
-                        page.screenshot(path='indeed_no_links.png')
+                        page.screenshot(path='screenshots/indeed_no_links.png')
                         browser.close()
                         break
 
