@@ -12,6 +12,15 @@ jobs:
   scrape-jobs:
     if: ${{ inputs.run_all != 'true' }}
     runs-on: ubuntu-latest
+    env:  # Add environment variables at the job level
+      DATABASE_NAME: ${{ secrets.DATABASE_NAME }}
+      DATABASE_USERNAME: ${{ secrets.DATABASE_USERNAME }}
+      DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
+      DATABASE_HOSTNAME: ${{ secrets.DATABASE_HOSTNAME }}
+      DATABASE_PORT: ${{ secrets.DATABASE_PORT }}
+      LINKEDIN_EMAIL: ${{ secrets.LINKEDIN_EMAIL }}
+      LINKEDIN_PASSWORD: ${{ secrets.LINKEDIN_PASSWORD }}
+
     strategy:
       matrix:
         include:
@@ -45,22 +54,22 @@ jobs:
           echo "LinkedIn Email: $LINKEDIN_EMAIL"
           echo "LinkedIn Password Length: ${#LINKEDIN_PASSWORD} characters"
 
-
       - name: Run scraper for ${{ matrix.source }} - ${{ matrix.category }}
-        env:
-          DATABASE_NAME: ${{ secrets.DATABASE_NAME }}
-          DATABASE_USERNAME: ${{ secrets.DATABASE_USERNAME }}
-          DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
-          DATABASE_HOSTNAME: ${{ secrets.DATABASE_HOSTNAME }}
-          DATABASE_PORT: ${{ secrets.DATABASE_PORT }}
-          LINKEDIN_EMAIL: ${{ secrets.LINKEDIN_EMAIL }}
-          LINKEDIN_PASSWORD: ${{ secrets.LINKEDIN_PASSWORD }}
         run: |
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python -m app.scrapers.scraper_main --source "${{ matrix.source }}" --category "${{ matrix.category }}" --max_pages 10
 
   run-all-scrapers:
     if: ${{ inputs.run_all == 'true' }}
     runs-on: ubuntu-latest
+    env:
+      DATABASE_NAME: ${{ secrets.DATABASE_NAME }}
+      DATABASE_USERNAME: ${{ secrets.DATABASE_USERNAME }}
+      DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
+      DATABASE_HOSTNAME: ${{ secrets.DATABASE_HOSTNAME }}
+      DATABASE_PORT: ${{ secrets.DATABASE_PORT }}
+      LINKEDIN_EMAIL: ${{ secrets.LINKEDIN_EMAIL }}
+      LINKEDIN_PASSWORD: ${{ secrets.LINKEDIN_PASSWORD }}
+
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -74,14 +83,5 @@ jobs:
           playwright install chromium
           sudo apt-get update && sudo apt-get install -y xvfb
       - name: Run all scrapers
-        env:
-          DATABASE_NAME: ${{ secrets.DATABASE_NAME }}
-          DATABASE_USERNAME: ${{ secrets.DATABASE_USERNAME }}
-          DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
-          DATABASE_HOSTNAME: ${{ secrets.DATABASE_HOSTNAME }}
-          DATABASE_PORT: ${{ secrets.DATABASE_PORT }}
-          LINKEDIN_EMAIL: ${{ secrets.LINKEDIN_EMAIL }}
-          LINKEDIN_PASSWORD: ${{ secrets.LINKEDIN_PASSWORD }}
         run: |
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python -m app.scrapers.scraper_main --run_all --max_pages 10
-        
