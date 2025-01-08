@@ -58,13 +58,20 @@ jobs:
         run: |
           xvfb-run --auto-servernum --server-args="-screen 0 1280x960x24" python -m app.scrapers.scraper_main --test-indeed
 
-      - name: Upload screenshot
+      - name: List generated files
+        if: always()
+        run: |
+          echo "Current directory contents:"
+          ls -la
+          echo "Screenshots directory contents:"
+          ls -la screenshots/
+
+      - name: Upload screenshots
         uses: actions/upload-artifact@v3
         if: always()
         with:
-          name: indeed-scraper-screenshot
+          name: indeed-scraper-screenshots
           path: |
-            indeed_page_load.png
-            indeed_no_links.png
-            indeed_error.png
-          retention-days: 3
+            *.png
+            screenshots/*.png
+          if-no-files-found: warn
