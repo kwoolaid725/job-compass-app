@@ -8,7 +8,7 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=sozjavbxj
       - POSTGRES_DB=job_postings
-    command: ["postgres", "-c", "listen_addresses=*"]  # Force listen on all addresses
+    command: ["postgres", "-c", "listen_addresses=*"]
     ports:
       - "5432:5432"
     volumes:
@@ -17,12 +17,18 @@ services:
   flaresolverr:
     image: ghcr.io/flaresolverr/flaresolverr:latest
     container_name: flaresolverr
-    network_mode: "host"  # Use host networking
+    ports:
+      - "8191:8191"
     environment:
-      - LOG_LEVEL=info
-      - LOG_HTML=false
+      - LOG_LEVEL=debug  # More verbose logging
+      - LOG_HTML=true    # Log HTML for debugging
       - TZ=Europe/London
-    restart: unless-stopped
+    restart: always  # Ensure it always restarts
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8191/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
 volumes:
   pgdata:

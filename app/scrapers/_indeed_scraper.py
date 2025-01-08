@@ -52,8 +52,8 @@ class IndeedScraperEnhanced:
         self.db_manager = db_manager
         self.logger = logger or logging.getLogger(__name__)
 
-    def send_flaresolverr_request(self, url: str):
-        """Send a GET request with FlareSolverr using httpx"""
+    def send_flaresolverr_request(self, url: str, max_retries: int = 3):
+        """Send a GET request with FlareSolverr using httpx with retries"""
         r_headers = {"Content-Type": "application/json"}
         payload = {
             "cmd": "request.get",
@@ -61,67 +61,71 @@ class IndeedScraperEnhanced:
             "maxTimeout": 60000
         }
 
-        try:
-            import socket
-
-            # Additional network diagnostics
+        for attempt in range(max_retries):
             try:
-                socket.setdefaulttimeout(10)
-                socket.create_connection(("localhost", 8191), timeout=10)
-                self.logger.info("Successfully connected to localhost:8191")
-            except Exception as conn_error:
-                self.logger.error(f"Connection to localhost:8191 failed: {conn_error}")
-                return None
+                self.logger.info(f"FlareSolverr request attempt {attempt + 1}")
 
-            with httpx.Client(timeout=60.0) as client:
-                self.logger.info(f"Attempting to send request to FlareSolverr at {self.flaresolverr_url}")
+                with httpx.Client(timeout=httpx.Timeout(60.0, connect=10.0)) as client:
+                    response = client.post(
+                        url=self.flaresolverr_url,
+                        headers=r_headers,
+                        json=payload
+                    )
 
-                response = client.post(url=self.flaresolverr_url, headers=r_headers, json=payload)
+                    # Log full response for debugging
+                    full_response = response.text
+                    self.logger.info(f"Full FlareSolverr response: {full_response}")
 
-                response.raise_for_status()
+                    response.raise_for_status()
 
-                response_data = response.json()
+                    response_data = response.json()
 
-                if response_data.get('solution', {}).get('response'):
-                    return response_data['solution']['response']
+                    if response_data.get('solution', {}).get('response'):
+                        return response_data['solution']['response']
 
-                self.logger.error(f"FlareSolverr failed to bypass URL: {url}")
-                return None
+                    self.logger.warning(f"FlareSolverr did not return a valid response: {response_data}")
 
-        except httpx.RequestError as e:
-            self.logger.error(f"Error sending request to FlareSolverr: {e}")
-            self.logger.error(f"FlareSolverr URL used: {self.flaresolverr_url}")
+            except (httpx.RequestError, httpx.HTTPStatusError) as e:
+                self.logger.error(f"FlareSolverr request error (attempt {attempt + 1}): {e}")
 
-            # Extensive error logging
-            try:
-                import subprocess
-
-                # Run network diagnostics
-                self.logger.info("Running network diagnostics:")
-
-                # Check if port is open
+                # Additional diagnostics
                 try:
-                    result = subprocess.run(['nc', '-zv', 'localhost', '8191'],
-                                            capture_output=True, text=True, timeout=10)
-                    self.logger.info(f"Port check result: {result.stdout} {result.stderr}")
-                except Exception as port_check_error:
-                    self.logger.error(f"Port check error: {port_check_error}")
+                    import subprocess
 
-                # Check service status
-                try:
-                    result = subprocess.run(['docker', 'ps'],
-                                            capture_output=True, text=True, timeout=10)
-                    self.logger.info(f"Docker containers: {result.stdout}")
-                except Exception as docker_ps_error:
-                    self.logger.error(f"Docker PS error: {docker_ps_error}")
+                    # Log Docker container status
+                    try:
+                        result = subprocess.run(
+                            ['docker', 'inspect', 'flaresolverr'],
+                            capture_output=True,
+                            text=True
+                        )
+                        self.logger.info(f"FlareSolverr container details: {result.stdout}")
+                    except Exception as docker_inspect_error:
+                        self.logger.error(f"Docker inspect error: {docker_inspect_error}")
 
-            except Exception as diag_error:
-                self.logger.error(f"Diagnostics error: {diag_error}")
+                    # Log container logs
+                    try:
+                        result = subprocess.run(
+                            ['docker', 'logs', 'flaresolverr'],
+                            capture_output=True,
+                            text=True
+                        )
+                        self.logger.info(f"FlareSolverr container logs: {result.stdout}")
+                    except Exception as docker_logs_error:
+                        self.logger.error(f"Docker logs error: {docker_logs_error}")
 
-            return None
-        except json.JSONDecodeError as e:
-            self.logger.error(f"Error parsing FlareSolverr response: {e}")
-            return None
+                except Exception as diag_error:
+                    self.logger.error(f"Diagnostics error: {diag_error}")
+
+                # Wait between retries
+                time.sleep(5)
+
+            except Exception as e:
+                self.logger.error(f"Unexpected FlareSolverr error: {e}")
+
+        # Fallback if all attempts fail
+        self.logger.error("All FlareSolverr attempts failed")
+        return None
 
     def launch_stealth_browser(self, playwright, headless=True):
         """Launch a stealth browser with enhanced Chromium stealth settings."""
@@ -286,7 +290,7 @@ class IndeedScraperEnhanced:
                 self.logger.info(f"🌐 Navigating to page {start // 10 + 1}")
 
                 try:
-                    # Try FlareSolverr first
+                    # Try FlareSolverr first with extended timeout
                     flaresolverr_content = self.send_flaresolverr_request(page_url)
 
                     if not flaresolverr_content:
