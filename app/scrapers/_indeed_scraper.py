@@ -291,32 +291,92 @@ class IndeedScraperEnhanced:
             time.sleep(random.uniform(0.5, 1.5))
 
     def handle_verification(self, page):
-        """Handle 'Verify Human' button if it appears"""
+        """Handle Cloudflare verification with visual marker"""
         try:
-            # Wait for verification button using multiple possible selectors
+            # Create screenshots directory
+            os.makedirs('screenshots', exist_ok=True)
+
+            # Take initial screenshot
+            page.screenshot(path='screenshots/1_before_verification.png')
+
+            # Cloudflare checkbox selectors
             verify_selectors = [
-                "button[value='Verify you are human']",
-                "input[value='Verify you are human']",
-                "#challenge-button",
-                "[data-action='verify']"
+                "input[type='checkbox']",
+                "iframe[title='Widget containing checkbox for hCaptcha security challenge']",
+                "#cf-stage input[type='checkbox']",
+                ".checkbox[name='cf-turnstile']"
             ]
 
             for selector in verify_selectors:
                 try:
-                    verify_button = page.wait_for_selector(selector, timeout=5000)
-                    if verify_button:
-                        print("🤖 Found verification button, clicking...")
-                        verify_button.click()
-                        time.sleep(random.uniform(2, 4))
-                        # Wait for page to load after verification
-                        page.wait_for_load_state('networkidle', timeout=10000)
-                        return True
-                except:
+                    # First check if we need to handle iframe
+                    iframes = page.frames
+                    main_frame = page
+
+                    for frame in iframes:
+                        if "turnstile" in frame.url or "cloudflare" in frame.url:
+                            main_frame = frame
+                            break
+
+                    # Wait for the checkbox
+                    checkbox = main_frame.wait_for_selector(selector, timeout=5000)
+
+                    if checkbox:
+                        # Get the position
+                        box = checkbox.bounding_box()
+                        if box:
+                            # Calculate center
+                            center_x = box['x'] + box['width'] / 2
+                            center_y = box['y'] + box['height'] / 2
+
+                            # Add red dot marker
+                            page.evaluate("""(x, y) => {
+                                const dot = document.createElement('div');
+                                dot.style.position = 'absolute';
+                                dot.style.left = (x - 5) + 'px';
+                                dot.style.top = (y - 5) + 'px';
+                                dot.style.width = '10px';
+                                dot.style.height = '10px';
+                                dot.style.backgroundColor = 'red';
+                                dot.style.borderRadius = '50%';
+                                dot.style.zIndex = '10000';
+                                document.body.appendChild(dot);
+                            }""", center_x, center_y)
+
+                            # Take screenshot with marker
+                            page.screenshot(path='screenshots/2_marker_location.png')
+
+                            # Move mouse naturally
+                            page.mouse.move(
+                                center_x + random.uniform(-5, 5),
+                                center_y + random.uniform(-5, 5),
+                                steps=random.randint(10, 20)
+                            )
+
+                            time.sleep(random.uniform(0.3, 0.7))
+
+                            # Click the checkbox
+                            checkbox.click(delay=random.uniform(50, 150))
+
+                            # Wait for verification
+                            time.sleep(2)
+                            page.screenshot(path='screenshots/3_after_click.png')
+
+                            # Wait for potential redirect or page change
+                            page.wait_for_load_state('networkidle', timeout=10000)
+                            return True
+
+                except Exception as e:
+                    print(f"Failed with selector {selector}: {e}")
                     continue
 
+            # If we get here, we couldn't find the checkbox
+            page.screenshot(path='screenshots/verification_failed.png')
             return False
+
         except Exception as e:
-            print(f"❌ Error handling verification: {e}")
+            print(f"Verification error: {e}")
+            page.screenshot(path='screenshots/error_state.png')
             return False
 
 
