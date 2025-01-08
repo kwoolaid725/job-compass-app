@@ -250,7 +250,7 @@ class IndeedScraperEnhanced:
             os.makedirs('screenshots', exist_ok=True)
             for start in range(0, self.max_pages * 10, 10):
                 # Use headless mode directly
-                browser, page = self.launch_stealth_browser(p, headless=False)
+                browser, page = self.launch_stealth_browser(p, headless=True)
                 page_url = f"{self.user_input.url}&start={start}"
                 self.logger.info(f"🌐 Navigating to page {start // 10 + 1}")
 
