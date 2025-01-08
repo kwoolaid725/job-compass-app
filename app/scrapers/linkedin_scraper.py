@@ -6,12 +6,14 @@ from playwright_stealth import stealth_sync
 from dataclasses import dataclass
 import json
 import time
-
+from typing import Optional, List
+from app.models.job import JobSource, JobCategory
+from app.crud.job_queries import find_linkedin_duplicates_batch
 from dotenv import load_dotenv
+import re
+import logging
 
-# Load environment variables
 load_dotenv()
-
 
 @dataclass
 class UserInput:
@@ -22,12 +24,108 @@ class UserInput:
 
 
 class LinkedInScraper:
-    def __init__(self, user_input: UserInput):
+    def __init__(self, user_input: UserInput, max_pages: int = 10,
+                 existing_urls: Optional[set] = None,
+                 job_source: Optional[JobSource] = None,
+                 job_category: Optional[JobCategory] = None,
+                 db_manager=None,
+                 logger=None):
         if not user_input.email or not user_input.password:
-            raise ValueError("LinkedIn credentials not found in environment variables. "
-                             "Please set LINKEDIN_EMAIL and LINKEDIN_PASSWORD in .env file")
+            raise ValueError("LinkedIn credentials not found in environment variables.")
+
         self.user_input = user_input
-        self.existing_urls = self.load_existing_job_urls()
+        self.job_source = job_source  # Should be JobSource enum
+        self.job_category = job_category  # Should be JobCategory enum
+        self.max_pages = max_pages
+        self.existing_urls = existing_urls if existing_urls else set()
+        self.db_manager = db_manager
+        self.jobs_processed = 0  # Add this line to track the number of processed jobs
+        self.logger = logger or logging.getLogger(__name__)
+
+
+
+    def extract_linkedin_job_id(self, url: str) -> Optional[str]:
+        """Extract LinkedIn job ID from job URL."""
+        match = re.search(r'/view/(\d+)', url)
+        return match.group(1) if match else None
+
+    def run(self):
+        """Run scraper for a given number of pages."""
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            context = browser.new_context(viewport={'width': 1920, 'height': 1080})
+            page = context.new_page()
+
+            # Login to LinkedIn
+            if not self.login_to_linkedin(page):
+                self.logger.error("❌ Failed to login, stopping scraper")
+                return
+
+            for start in range(0, self.max_pages * 25, 25):
+                page_url = f"{self.user_input.url}&start={start}"
+                self.logger.info(f"🔍 Processing page: {start // 25 + 1}")
+
+                try:
+                    page.goto(page_url, timeout=45000)
+                    page.wait_for_timeout(random.uniform(3000, 5000))
+                    self.scroll_with_mouse_wheel(page)
+                    job_links = self.extract_job_links(page)
+
+                    if not job_links:
+                        self.logger.error("No more jobs found, stopping")
+                        break
+
+                    # Perform batch duplicate check
+                    duplicate_job_ids = find_linkedin_duplicates_batch(self.db_manager.Session(), job_links)
+
+                    for job_url in job_links:
+                        job_id = self.extract_linkedin_job_id(job_url)
+                        if job_id in duplicate_job_ids:
+                            self.logger.info(f"⏭️ Skipping duplicate job: {job_url}")
+                            continue
+
+                        self.process_job(page, job_url)
+                        # job_data = self.get_job_details(page, job_url)
+                        # if job_data:
+                        #     self.save_to_file(job_data)
+                        #     self.existing_urls.add(job_url)
+                        #     time.sleep(random.uniform(1, 3))
+
+                except Exception as e:
+                    self.logger.error(f"❌ Error processing page {start}: {e}")
+                    time.sleep(random.uniform(10, 15))
+                    continue
+
+                time.sleep(random.uniform(3, 6))
+
+            browser.close()
+
+    def process_job(self, page, job_url):
+        """Process individual job URLs."""
+        try:
+            # Get job details from the LinkedIn job page
+            details = self.get_job_details(page, job_url)
+
+            if details:
+                job_data = {
+                    'job_url': job_url,
+                    'raw_content': json.dumps(details),
+                    'source': self.job_source if isinstance(self.job_source, str) else self.job_source.name.upper(),
+                    'job_category': self.job_category if isinstance(self.job_category,
+                                                                    str) else self.job_category.name.upper(),
+                    'salary_text': details.get('salary_text'),
+                    'processed': False
+                }
+
+                # Save job data to the database
+                if self.db_manager and self.db_manager.save_raw_job(job_data):
+                    self.jobs_processed += 1
+                    self.logger.info(f"✅ Saved job {self.jobs_processed}: {job_url}")
+                else:
+                    self.logger.error(f"⚠️ Failed to save job: {job_url}")
+
+        except Exception as e:
+            self.logger.error(f"❌ Error processing job {job_url}: {e}")
 
     def load_existing_job_urls(self) -> set:
         """Load already scraped job URLs from the output file."""
@@ -188,6 +286,8 @@ class LinkedInScraper:
             print(f"❌ Error extracting job links: {e}")
             return []
 
+
+
     def get_job_details(self, page, job_url):
         """Extract details from individual job posting."""
         try:
@@ -261,57 +361,8 @@ class LinkedInScraper:
             print(f"❌ Error saving data: {e}")
             return False
 
-    def run(self):
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=False)
-            context = browser.new_context(viewport={'width': 1920, 'height': 1080})
-            page = context.new_page()
 
-            # Login first
-            if not self.login_to_linkedin(page):
-                print("❌ Failed to login, stopping scraper")
-                return
 
-            # Scrape jobs
-            for start in range(0, 1000, 25):   # LinkedIn uses 25 job increments
-                page_url = f"{self.user_input.url}&start={start}"
-                print(f"🔍 Processing page: {start // 25 + 1}")
-
-                try:
-                    # Navigate to page with extended timeout
-                    page.goto(page_url, timeout=45000)
-
-                    # Wait a random time before scrolling
-                    page.wait_for_timeout(random.uniform(3000, 5000))
-
-                    # **Use the mouse-wheel scrolling method here**
-                    self.scroll_with_mouse_wheel(page)
-
-                    # Extract job links
-                    job_links = self.extract_job_links(page)
-
-                    if not job_links:
-                        print("No more jobs found, stopping")
-                        break
-
-                    for job_url in job_links:
-                        if job_url in self.existing_urls:
-                            print(f"⏭️ Skipping existing job: {job_url}")
-                            continue
-
-                        job_data = self.get_job_details(page, job_url)
-                        if job_data:
-                            self.save_to_file(job_data)
-                            self.existing_urls.add(job_url)
-                            time.sleep(random.uniform(1, 3))
-
-                except Exception as e:
-                    print(f"❌ Error processing page {start}: {e}")
-                    time.sleep(random.uniform(10, 15))
-                    continue
-
-                # Delay between pages
-                time.sleep(random.uniform(3, 6))
 
 
 def main():

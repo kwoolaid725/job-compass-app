@@ -6,6 +6,12 @@ from playwright_stealth import stealth_sync
 from dataclasses import dataclass
 import json
 import time
+from app.models.job import JobSource, JobCategory
+from typing import Optional
+from sqlalchemy.sql import text
+import re
+from app.crud.job_queries import find_indeed_duplicates_batch
+import logging
 
 # Enhanced User-Agents list
 user_agents = [
@@ -25,9 +31,68 @@ class UserInput:
 
 
 class IndeedScraper:
-    def __init__(self, user_input: UserInput):
+    def __init__(self, user_input: UserInput, max_pages: int = 10,
+                 existing_urls: Optional[set] = None,
+                 job_source: Optional[JobSource] = None,
+                 job_category: Optional[JobCategory] = None,
+                 db_manager=None,
+                 logger=None):
         self.user_input = user_input
-        self.existing_urls = self.load_existing_job_urls()
+        self.max_pages = max_pages  # Max number of pages to scrape
+        self.job_source = job_source
+        self.job_category = job_category
+        self.jobs_processed = 0
+        self.db_manager = db_manager  # Database manager for DB access
+        self.existing_urls = existing_urls if existing_urls is not None else self.load_existing_job_urls()
+        self.logger = logger or logging.getLogger(__name__)  # Default to global logger if none passed
+
+    def get_indeed_job_key(self, url: str) -> str:
+        """Extract job key from an Indeed URL."""
+        import re
+        match = re.search(r'clk\?jk=([^&]+)', url)
+        return match.group(1) if match else None
+
+
+    def run(self):
+        """Run the scraper and iterate over pages based on max_pages."""
+        with sync_playwright() as p:
+            for start in range(0, self.max_pages * 10, 10):
+                browser, page = self.launch_stealth_browser(p)
+                page_url = f"{self.user_input.url}&start={start}"
+                self.logger.info(f"🌐 Navigating to page {start // 10 + 1}")
+
+                try:
+                    page.goto(page_url, timeout=60000)
+                    time.sleep(random.uniform(1, 3))
+
+                    if self.handle_verification(page):
+                        print("✅ Verification completed")
+
+                    job_links = self.extract_job_links(page)
+
+                    if not job_links:
+                        self.logger.error("❌ No job links found")
+                        browser.close()
+                        break
+
+                    # Get duplicates for the current batch of job links
+                    duplicate_keys = find_indeed_duplicates_batch(self.db_manager.Session(), job_links)
+
+                    for job_url in job_links:
+                        job_key = self.get_indeed_job_key(job_url)
+                        if job_key in duplicate_keys:
+                            self.logger.info(f"⏭️ Skipping duplicate job: {job_url}")
+                            continue
+
+                        # Process non-duplicate jobs
+                        self.process_job(job_url, browser)
+
+                except Exception as e:
+                    self.logger.info(f"❌ Error on page {start}: {e}")
+                finally:
+                    browser.close()
+                    time.sleep(random.uniform(2, 5))
+
 
     def load_existing_job_urls(self) -> set:
         """Load already scraped job URLs from the output file."""
@@ -103,55 +168,12 @@ class IndeedScraper:
             print(f"❌ Error handling verification: {e}")
             return False
 
-    def run(self):
-        with sync_playwright() as p:
-            processed_count = 0
-            # for start in range(0, 501, 10):
-            for start in range(230, 1000, 10):
-                browser, page = self.launch_stealth_browser(p)
-                page_url = f"{self.user_input.url}&start={start}"
-                print(f"\U0001F310 Navigating to {page_url}")
 
-                # Clear data periodically
-                if processed_count > 20:
-                    self.clear_browser_data(page.context)
-                    processed_count = 0
-                    time.sleep(random.uniform(10, 15))
-
-                try:
-                    page.goto(page_url, timeout=60000)
-                    time.sleep(random.uniform(1, 3))
-
-                    # Check and handle verification if needed
-                    if self.handle_verification(page):
-                        print("✅ Verification completed")
-
-                    self.simulate_human_behavior(page)
-                    job_links = self.extract_job_links(page)
-                except Exception as e:
-                    print(f"❌ Skipping start={start} due to error: {e}")
-                    browser.close()
-                    time.sleep(random.uniform(15, 30))  # Longer delay after error
-                    continue
-
-                if not job_links:
-                    print(f"❌ No job links found on page with start={start}")
-                    browser.close()
-                    break
-
-                for i in range(0, len(job_links), 5):
-                    batch = job_links[i:i + 5]
-                    print(f"\U0001F4C8 Processing batch {i // 5 + 1}: {len(batch)} jobs")
-                    self.process_batch(batch, browser)
-                    processed_count += len(batch)
-
-                browser.close()
-                time.sleep(random.uniform(2, 5))  # Delay between pages
 
     def launch_stealth_browser(self, playwright):
         """Launch a stealth browser with enhanced stealth settings."""
         browser = playwright.chromium.launch(
-            headless=False,
+            headless=True,
             args=[
                 "--start-maximized",
                 "--enable-webgl",
@@ -193,12 +215,12 @@ class IndeedScraper:
                 if href:
                     full_url = urljoin('https://www.indeed.com', href)
                     job_links.append(full_url)
-                    print(f"\U0001F517 Job Link {i + 1}: {full_url}")
+                    self.logger.info(f"\U0001F517 Job Link {i + 1}: {full_url}")
                 if i % 5 == 0:  # Add small delays during extraction
                     time.sleep(random.uniform(0.5, 1))
         except Exception as e:
             print(f"❌ Error extracting job links: {e}")
-        print(f"✅ Extracted {len(job_links)} job links")
+        self.logger.info(f"✅ Extracted {len(job_links)} job links")
         return job_links
 
     def process_batch(self, batch, browser):
@@ -310,12 +332,46 @@ class IndeedScraper:
             print(f"❌ Error processing job URL: {job_url} - {e}")
             return False
 
+    def process_job(self, job_url, browser):
+        """Process individual job URLs."""
+        try:
+            details = self.get_job_details(browser, job_url)
+            if details and (details.get('hostQueryExecutionResult') or details.get('salary_html')):
+                job_data = {
+                    'job_url': job_url,
+                    'raw_content': json.dumps({
+                        'host_query_execution_result': details.get('hostQueryExecutionResult', {})
+                    }),
+                    'source': self.job_source,
+                    'job_category': self.job_category,
+                    'salary_text': details.get('salary_html')
+                }
+
+                if self.db_manager and self.db_manager.save_raw_job(job_data):
+                    self.jobs_processed += 1
+                    self.logger.info(f"✅ Saved job {self.jobs_processed}: {job_url}")
+
+        except Exception as e:
+            self.logger.error(f"❌ Error processing job {job_url}: {e}")
+
 
 def main():
-    user_input = UserInput(method="scrape_webpage", url="https://www.indeed.com/jobs?q=python+developer")
-    scraper = IndeedScraper(user_input)
-    scraper.run()
+    """Example usage of both modes"""
+    # Batch mode (original)
+    batch_input = UserInput(method="scrape_webpage", url="https://www.indeed.com/jobs?q=python+developer")
+    batch_scraper = IndeedScraper(batch_input)
+    batch_scraper.run()
 
+    # # Cron mode (new)
+    # db_manager = DatabaseManager()
+    # cron_input = UserInput(method="scrape_webpage", url="https://www.indeed.com/jobs?q=python+developer&sort=date")
+    # cron_scraper = IndeedScraper(
+    #     user_input=cron_input,
+    #     db_manager=db_manager,
+    #     job_source=JobSource.INDEED,
+    #     job_category=JobCategory.PYTHON_DEVELOPER
+    # )
+    # cron_scraper.run_cron()
 
 if __name__ == "__main__":
     main()

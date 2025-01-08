@@ -3,7 +3,7 @@ import sys
 from dotenv import load_dotenv
 import argparse
 from sqlalchemy import create_engine
-from app.scrapers.scraper_cron_job import main as scraper_main
+from app.scrapers.scraper_main import main as scraper_main
 
 
 def test_database_connection():

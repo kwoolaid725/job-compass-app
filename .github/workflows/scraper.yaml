@@ -1,4 +1,5 @@
 name: Job Scraper
+
 on:
   schedule:
     - cron: '0 */12 * * *'  # Runs every 12 hours
@@ -7,6 +8,7 @@ on:
 jobs:
   scrape-jobs:
     runs-on: ubuntu-latest
+
     strategy:
       matrix:
         include:
@@ -37,6 +39,7 @@ jobs:
           pip install playwright playwright-stealth sqlalchemy psycopg2-binary
           playwright install chromium
 
+      # Run for individual combinations (based on matrix)
       - name: Run scraper for ${{ matrix.source }} - ${{ matrix.category }}
         env:
           DATABASE_NAME: ${{ secrets.DATABASE_NAME }}
@@ -47,6 +50,52 @@ jobs:
           LINKEDIN_EMAIL: ${{ secrets.LINKEDIN_EMAIL }}
           LINKEDIN_PASSWORD: ${{ secrets.LINKEDIN_PASSWORD }}
         run: |
-          python scraper.py \
+          python -m app.scrapers.scraper_main \
             --source "${{ matrix.source }}" \
-            --category "${{ matrix.category }}"
+            --category "${{ matrix.category }}" --max_pages 10
+
+      # Upload logs for individual scraper runs
+      - name: Upload logs
+        if: always()  # Upload logs even if a step fails
+        uses: actions/upload-artifact@v3
+        with:
+          name: scraper-logs-${{ matrix.source }}-${{ matrix.category }}
+          path: logs/scraper.log
+
+  run-all-scrapers:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install playwright playwright-stealth sqlalchemy psycopg2-binary
+          playwright install chromium
+
+      # Run all combinations in one batch
+      - name: Run all combinations
+        env:
+          DATABASE_NAME: ${{ secrets.DATABASE_NAME }}
+          DATABASE_USERNAME: ${{ secrets.DATABASE_USERNAME }}
+          DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
+          DATABASE_HOSTNAME: ${{ secrets.DATABASE_HOSTNAME }}
+          DATABASE_PORT: ${{ secrets.DATABASE_PORT }}
+          LINKEDIN_EMAIL: ${{ secrets.LINKEDIN_EMAIL }}
+          LINKEDIN_PASSWORD: ${{ secrets.LINKEDIN_PASSWORD }}
+        run: |
+          python -m app.scrapers.scraper_main --run_all --max_pages 10
+
+      # Upload logs for the full batch run
+      - name: Upload batch run logs
+        if: always()  # Upload logs even if the step fails
+        uses: actions/upload-artifact@v3
+        with:
+          name: scraper-logs-batch-run
+          path: logs/scraper.log
