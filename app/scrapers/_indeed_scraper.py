@@ -200,9 +200,6 @@ class IndeedScraperEnhanced:
             print("📸 Captured error state")
             return False
 
-
-
-
     def run(self):
         """
         Enhanced scraping run method with headless mode
@@ -211,28 +208,31 @@ class IndeedScraperEnhanced:
             os.makedirs('screenshots', exist_ok=True)
             for start in range(0, self.max_pages * 10, 10):
                 # Use headless mode directly
-                browser, page = self.launch_stealth_browser(p, headless=True)
+                browser, page = self.launch_stealth_browser(p, headless=False)  # Set to False to see verification
                 page_url = f"{self.user_input.url}&start={start}"
                 self.logger.info(f"🌐 Navigating to page {start // 10 + 1}")
 
                 try:
-
-                    # Navigate to page
+                    # Navigate to page and wait for load
                     page.goto(page_url, timeout=60000)
+                    page.wait_for_load_state('networkidle', timeout=10000)
 
-                    # screenshot_path = 'indeed_page_load.png'
-                    # page.screenshot(path=screenshot_path)
-                    #
-                    # self.logger.info(f"Screenshot saved to {screenshot_path}")
+                    # Take initial screenshot
+                    page.screenshot(path='screenshots/1_initial_page.png')
+                    self.logger.info("📸 Initial page screenshot captured")
 
-                    time.sleep(random.uniform(1, 3))
+                    # Handle verification immediately
+                    time.sleep(2)  # Brief pause to let any verification popup appear
 
-                    # Rest of the existing logic remains the same
-                    # Advanced verification handling
-                    if self.handle_verification(page):
-                        self.logger.info("✅ Verification challenge bypassed")
+                    verification_result = self.handle_verification(page)
+                    if verification_result:
+                        self.logger.info("✅ Verification challenge handled")
+                        # Take post-verification screenshot
+                        page.screenshot(path='screenshots/5_post_verification.png')
+                    else:
+                        self.logger.info("ℹ️ No verification needed or verification failed")
 
-                    # Extract job links
+                    # Rest of your existing logic
                     job_links = self.extract_job_links(page)
 
                     if not job_links:
@@ -255,6 +255,8 @@ class IndeedScraperEnhanced:
 
                 except Exception as e:
                     self.logger.error(f"❌ Error on page {start}: {e}")
+                    # Take error screenshot
+                    page.screenshot(path='screenshots/error_state.png')
                 finally:
                     browser.close()
                     time.sleep(random.uniform(2, 5))
