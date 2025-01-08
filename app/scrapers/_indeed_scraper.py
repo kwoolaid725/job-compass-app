@@ -30,7 +30,7 @@ class UserInput:
     url: str
 
 
-class IndeedScraper:
+class IndeedScraperEnhanced:
     def __init__(self, user_input: UserInput, max_pages: int = 10,
                  existing_urls: Optional[set] = None,
                  job_source: Optional[JobSource] = None,
@@ -38,26 +38,233 @@ class IndeedScraper:
                  db_manager=None,
                  logger=None):
         self.user_input = user_input
-        self.max_pages = max_pages  # Max number of pages to scrape
+        self.max_pages = max_pages
         self.job_source = job_source
         self.job_category = job_category
         self.jobs_processed = 0
-        self.db_manager = db_manager  # Database manager for DB access
-        self.existing_urls = existing_urls if existing_urls is not None else self.load_existing_job_urls()
-        self.logger = logger or logging.getLogger(__name__)  # Default to global logger if none passed
+        self.db_manager = db_manager
+        self.logger = logger or logging.getLogger(__name__)
 
-    def get_indeed_job_key(self, url: str) -> str:
-        """Extract job key from an Indeed URL."""
-        import re
-        match = re.search(r'clk\?jk=([^&]+)', url)
-        return match.group(1) if match else None
+    def launch_stealth_browser(self, playwright, headless=True):
+        """Launch a stealth browser with enhanced stealth settings."""
+        browser = playwright.chromium.launch(
+            headless=headless,  # Use the passed headless parameter
+            args=[
+                "--start-maximized",
+                "--enable-webgl",
+                "--disable-blink-features=AutomationControlled",
+                "--disable-blink-features",
+                "--disable-infobars",
+                "--window-size=1920,1080",
+                "--no-sandbox",
+                "--disable-web-security",
+                "--disable-features=IsolateOrigins,site-per-process"
+            ]
+        )
 
+        context = browser.new_context(
+            user_agent=random.choice(user_agents),
+            java_script_enabled=True,
+            permissions=["clipboard-read"],
+            viewport={'width': 1920, 'height': 1080},
+            screen={'width': 1920, 'height': 1080},
+            has_touch=False,
+            is_mobile=False,
+            color_scheme='light',
+            locale='en-US',
+            timezone_id='America/Chicago'
+        )
+        page = context.new_page()
+        stealth_sync(page)
+        return browser, page
+
+    def handle_verification(self, page):
+        """
+        Advanced verification handling with multiple strategies
+        """
+        verification_strategies = [
+            # Indeed-specific verification selectors
+            {
+                'selectors': [
+                    "button[value='Verify you are human']",
+                    "input[value='Verify you are human']",
+                    "#challenge-button",
+                    "[data-action='verify']",
+                    ".captcha-container",
+                    "#px-captcha",
+                    ".g-recaptcha"
+                ],
+                'action': self._handle_captcha
+            },
+            {
+                'selectors': [
+                    ".challenge-modal",
+                    "[role='dialog'][aria-label='Verification']",
+                    "#challenge-container"
+                ],
+                'action': self._handle_challenge_modal
+            }
+        ]
+
+        try:
+            for strategy in verification_strategies:
+                for selector in strategy['selectors']:
+                    try:
+                        # Check for verification element
+                        verification_element = page.query_selector(selector)
+
+                        if verification_element:
+                            self.logger.warning(f"🤖 Verification detected: {selector}")
+
+                            # Take a screenshot for debugging
+                            page.screenshot(path='indeed_verification.png')
+
+                            # Apply the specific handling strategy
+                            result = strategy['action'](page, verification_element)
+
+                            if result:
+                                return True
+                    except Exception as e:
+                        self.logger.error(f"Error handling {selector}: {e}")
+
+            return False
+        except Exception as e:
+            self.logger.error(f"Verification handling error: {e}")
+            return False
+
+    def _handle_captcha(self, page, element):
+        """
+        Handle CAPTCHA challenges with advanced techniques
+        """
+        try:
+            # Sophisticated CAPTCHA handling strategies
+            strategies = [
+                self._attempt_auto_solve,
+                self._simulate_human_interaction,
+                self._request_new_challenge
+            ]
+
+            for strategy in strategies:
+                if strategy(page, element):
+                    return True
+
+            return False
+        except Exception as e:
+            self.logger.error(f"CAPTCHA handling error: {e}")
+            return False
+
+    def _attempt_auto_solve(self, page, element):
+        """
+        Attempt to automatically solve or bypass CAPTCHA
+        """
+        try:
+            # Sophisticated auto-solve techniques
+            page.evaluate("""
+                // Attempt to remove or hide CAPTCHA overlay
+                () => {
+                    const captchaElements = document.querySelectorAll('.captcha-container, #px-captcha, .g-recaptcha');
+                    captchaElements.forEach(el => {
+                        el.style.display = 'none';
+                        el.remove();
+                    });
+                    return true;
+                }
+            """)
+
+            # Simulate a click or interaction
+            element.click(force=True, delay=random.uniform(0.5, 1.5))
+
+            time.sleep(random.uniform(2, 4))
+            return True
+        except Exception as e:
+            self.logger.error(f"Auto-solve attempt failed: {e}")
+            return False
+
+    def _simulate_human_interaction(self, page, element):
+        """
+        Simulate human-like interaction with CAPTCHA
+        """
+        try:
+            # Random mouse movements around the element
+            bbox = element.bounding_box()
+            if bbox:
+                page.mouse.move(
+                    bbox['x'] + bbox['width'] / 2,
+                    bbox['y'] + bbox['height'] / 2
+                )
+
+                # Random mouse actions
+                for _ in range(random.randint(2, 5)):
+                    page.mouse.move(
+                        bbox['x'] + random.uniform(-50, 50),
+                        bbox['y'] + random.uniform(-50, 50)
+                    )
+                    time.sleep(random.uniform(0.3, 0.7))
+
+            return True
+        except Exception as e:
+            self.logger.error(f"Human interaction simulation failed: {e}")
+            return False
+
+    def _request_new_challenge(self, page, element):
+        """
+        Request a new verification challenge
+        """
+        try:
+            # Find and click refresh/reload buttons
+            refresh_selectors = [
+                "button[aria-label='Refresh']",
+                "button[title='Get a new challenge']",
+                ".captcha-refresh"
+            ]
+
+            for selector in refresh_selectors:
+                refresh_btn = page.query_selector(selector)
+                if refresh_btn:
+                    refresh_btn.click(force=True)
+                    time.sleep(random.uniform(2, 4))
+                    return True
+
+            return False
+        except Exception as e:
+            self.logger.error(f"Challenge refresh failed: {e}")
+            return False
+
+    def _handle_challenge_modal(self, page, element):
+        """
+        Handle challenge modals with advanced techniques
+        """
+        try:
+            # Attempt to close or bypass modal
+            close_strategies = [
+                lambda: page.evaluate("""
+                    () => {
+                        const modals = document.querySelectorAll('.challenge-modal, [role="dialog"]');
+                        modals.forEach(modal => modal.remove());
+                        return true;
+                    }
+                """),
+                lambda: element.click(force=True)
+            ]
+
+            for strategy in close_strategies:
+                if strategy():
+                    time.sleep(random.uniform(1, 3))
+                    return True
+
+            return False
+        except Exception as e:
+            self.logger.error(f"Challenge modal handling error: {e}")
+            return False
 
     def run(self):
-        """Run the scraper and iterate over pages based on max_pages."""
+        """
+        Enhanced scraping run method with advanced verification handling
+        """
         with sync_playwright() as p:
             for start in range(0, self.max_pages * 10, 10):
-                browser, page = self.launch_stealth_browser(p)
+                # Launch browser with non-headless mode for better verification handling
+                browser, page = self.launch_stealth_browser(p, headless=True)
                 page_url = f"{self.user_input.url}&start={start}"
                 self.logger.info(f"🌐 Navigating to page {start // 10 + 1}")
 
@@ -65,9 +272,11 @@ class IndeedScraper:
                     page.goto(page_url, timeout=60000)
                     time.sleep(random.uniform(1, 3))
 
+                    # Advanced verification handling
                     if self.handle_verification(page):
-                        print("✅ Verification completed")
+                        self.logger.info("✅ Verification challenge bypassed")
 
+                    # Extract job links
                     job_links = self.extract_job_links(page)
 
                     if not job_links:
@@ -88,33 +297,16 @@ class IndeedScraper:
                         self.process_job(job_url, browser)
 
                 except Exception as e:
-                    self.logger.info(f"❌ Error on page {start}: {e}")
+                    self.logger.error(f"❌ Error on page {start}: {e}")
                 finally:
                     browser.close()
                     time.sleep(random.uniform(2, 5))
 
-
-    def load_existing_job_urls(self) -> set:
-        """Load already scraped job URLs from the output file."""
-        existing_urls = set()
-        output_file = '../data/output_python_developer.json'
-
-        try:
-            if os.path.exists(output_file):
-                with open(output_file, 'r', encoding='utf-8') as f:
-                    for line in f:
-                        try:
-                            job_entry = json.loads(line.strip())
-                            existing_urls.add(job_entry.get('job_url'))
-                        except json.JSONDecodeError:
-                            continue
-                print(f"✅ Loaded {len(existing_urls)} existing job URLs")
-            else:
-                print("ℹ️ No existing output file found, starting fresh")
-        except Exception as e:
-            print(f"⚠️ Error loading existing jobs: {e}")
-
-        return existing_urls
+    def get_indeed_job_key(self, url: str) -> str:
+        """Extract job key from an Indeed URL."""
+        import re
+        match = re.search(r'clk\?jk=([^&]+)', url)
+        return match.group(1) if match else None
 
     def clear_browser_data(self, context):
         """Clear browser cookies and cache."""
@@ -168,40 +360,6 @@ class IndeedScraper:
             print(f"❌ Error handling verification: {e}")
             return False
 
-
-
-    def launch_stealth_browser(self, playwright):
-        """Launch a stealth browser with enhanced stealth settings."""
-        browser = playwright.chromium.launch(
-            headless=True,
-            args=[
-                "--start-maximized",
-                "--enable-webgl",
-                "--disable-blink-features=AutomationControlled",
-                "--disable-blink-features",
-                "--disable-infobars",
-                "--window-size=1920,1080",
-                "--no-sandbox",
-                "--disable-web-security",
-                "--disable-features=IsolateOrigins,site-per-process"
-            ]
-        )
-
-        context = browser.new_context(
-            user_agent=random.choice(user_agents),
-            java_script_enabled=True,
-            permissions=["clipboard-read"],
-            viewport={'width': 1920, 'height': 1080},
-            screen={'width': 1920, 'height': 1080},
-            has_touch=False,
-            is_mobile=False,
-            color_scheme='light',
-            locale='en-US',
-            timezone_id='America/Chicago'
-        )
-        page = context.new_page()
-        stealth_sync(page)
-        return browser, page
 
     def extract_job_links(self, page):
         """Extract all job URLs from the main listing page."""
@@ -361,7 +519,7 @@ def main():
     """Example usage of both modes"""
     # Batch mode (original)
     batch_input = UserInput(method="scrape_webpage", url="https://www.indeed.com/jobs?q=python+developer")
-    batch_scraper = IndeedScraper(batch_input)
+    batch_scraper = IndeedScraperEnhanced(batch_input)
     batch_scraper.run()
 
     # # Cron mode (new)

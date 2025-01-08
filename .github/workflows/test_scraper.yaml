@@ -1,0 +1,71 @@
+name: Test Enhanced Indeed Scraper
+
+on:
+  workflow_dispatch:
+    inputs:
+      category:
+        description: 'Job category to test'
+        required: false
+        default: 'python_developer'
+        type: choice
+        options:
+          - python_developer
+          - data_engineer
+          - data_scientist
+
+jobs:
+  test-enhanced-indeed-scraper:
+    runs-on: ubuntu-latest
+    env:
+      LINKEDIN_EMAIL: ${{ secrets.LINKEDIN_EMAIL }}
+      LINKEDIN_PASSWORD: ${{ secrets.LINKEDIN_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            xvfb \
+            libnss3 \
+            libxss1 \
+            libatk-bridge2.0-0 \
+            libgbm-dev \
+            libgtk-3-0 \
+            libxshmfence-dev
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r requirements.actions.txt
+          playwright install
+          playwright install-deps
+
+      - name: Debug Environment
+        run: |
+          echo "Python version:"
+          python --version
+          echo "Playwright version:"
+          pip show playwright
+
+      - name: Run Enhanced Indeed Scraper Test
+        run: |
+          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python -m app.scrapers.scraper_main --test-indeed
+
+      - name: Upload test artifacts
+        uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          name: enhanced-indeed-scraper-test-artifacts
+          path: |
+            logs/
+            *.log
+            *.png
+            indeed_verification.png
+          retention-days: 3

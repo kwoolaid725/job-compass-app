@@ -8,6 +8,8 @@ from app.models.job import JobSource, JobCategory
 from app.db.database_manager import DatabaseManager
 from dotenv import load_dotenv
 
+from app.scrapers._indeed_scraper import IndeedScraperEnhanced
+
 # Create logs directory if not exists
 log_dir = "logs"
 os.makedirs(log_dir, exist_ok=True)
@@ -36,6 +38,49 @@ class UserInput:
     url: str
     email: str = os.getenv('LINKEDIN_EMAIL')
     password: str = os.getenv('LINKEDIN_PASSWORD')
+
+def test_indeed_scraper_enhanced():
+    """
+    Temporary test function for IndeedScraperEnhanced
+    Allows manual testing and debugging of the enhanced scraper
+    """
+    # Configuration for testing
+    test_urls = {
+        'python_developer': "https://www.indeed.com/jobs?q=python+developer&sort=date",
+        'data_engineer': "https://www.indeed.com/jobs?q=data+engineer&sort=date",
+        'data_scientist': "https://www.indeed.com/jobs?q=data+scientist&sort=date"
+    }
+
+    # Choose a URL to test
+    test_url = test_urls['python_developer']
+
+    # Create DatabaseManager instance
+    db_manager = DatabaseManager()
+
+    # Create UserInput
+    user_input = UserInput(
+        method="scrape_webpage",
+        url=test_url
+    )
+
+    # Create IndeedScraperEnhanced instance
+    scraper = IndeedScraperEnhanced(
+        user_input=user_input,
+        db_manager=db_manager,
+        job_source=JobSource.INDEED,
+        job_category=JobCategory.PYTHON_DEVELOPER,
+        max_pages=3,  # Limit to fewer pages for testing
+        logger=logger
+    )
+
+    # Run the scraper
+    try:
+        logger.info("🚀 Starting Enhanced Indeed Scraper Test...")
+        scraper.run()
+        logger.info("✅ Enhanced Indeed Scraper Test Completed")
+    except Exception as e:
+        logger.error(f"❌ Enhanced Indeed Scraper Test Failed: {e}")
+        raise
 
 
 def run_single_scraper(source: JobSource, category: JobCategory, max_pages: int):
@@ -98,36 +143,54 @@ def run_all_combinations(max_pages: int):
         run_single_scraper(source, category, max_pages)
 
 
+# def main():
+#     parser = argparse.ArgumentParser(description="Job Scraper")
+#     parser.add_argument("--source", type=str, choices=["indeed", "linkedin"],
+#                         help="Source to scrape (indeed or linkedin)")
+#     parser.add_argument("--category", type=str, choices=["python_developer", "data_engineer", "data_scientist"],
+#                         help="Job category")
+#     parser.add_argument("--max_pages", type=int, required=False, default=10,
+#                         help="Number of pages to scrape (default: 10)")
+#     parser.add_argument("--run_all", action="store_true",
+#                         help="Run all combinations of sources and categories")
+#
+#     args = parser.parse_args()
+#
+#     try:
+#         if args.run_all:
+#             logger.info("🚀 Running all scraper combinations...")
+#             run_all_combinations(args.max_pages)
+#         else:
+#             if not args.source or not args.category:
+#                 parser.error("You must provide both --source and --category unless using --run_all.")
+#
+#             # Convert string to enums
+#             source = JobSource[args.source.upper()]
+#             category = JobCategory[args.category.upper()]
+#             run_single_scraper(source, category, args.max_pages)
+#
+#     except Exception as e:
+#         logger.error(f"❌ Error running scraper: {e}")
+#         exit(1)
+
 def main():
     parser = argparse.ArgumentParser(description="Job Scraper")
-    parser.add_argument("--source", type=str, choices=["indeed", "linkedin"],
-                        help="Source to scrape (indeed or linkedin)")
-    parser.add_argument("--category", type=str, choices=["python_developer", "data_engineer", "data_scientist"],
-                        help="Job category")
-    parser.add_argument("--max_pages", type=int, required=False, default=10,
-                        help="Number of pages to scrape (default: 10)")
-    parser.add_argument("--run_all", action="store_true",
-                        help="Run all combinations of sources and categories")
+    parser.add_argument("--test-indeed", action="store_true",
+                        help="Run test for Enhanced Indeed Scraper")
 
     args = parser.parse_args()
 
     try:
-        if args.run_all:
-            logger.info("🚀 Running all scraper combinations...")
-            run_all_combinations(args.max_pages)
+        if args.test_indeed:
+            # Run the test function for Enhanced Indeed Scraper
+            test_indeed_scraper_enhanced()
         else:
-            if not args.source or not args.category:
-                parser.error("You must provide both --source and --category unless using --run_all.")
-
-            # Convert string to enums
-            source = JobSource[args.source.upper()]
-            category = JobCategory[args.category.upper()]
-            run_single_scraper(source, category, args.max_pages)
+            # Default scraper logic from the original script
+            parser.print_help()
 
     except Exception as e:
-        logger.error(f"❌ Error running scraper: {e}")
+        logger.error(f"❌ Error in main execution: {e}")
         exit(1)
-
 
 if __name__ == "__main__":
     main()
