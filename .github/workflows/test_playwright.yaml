@@ -44,9 +44,8 @@ jobs:
           which python
           echo "Playwright version:"
           pip show playwright
-          echo "Installed browsers:"
-          python -m playwright install-browsers
-          python -m playwright show-browsers
+          echo "Checking Playwright browser installation:"
+          playwright install
 
       - name: Run Playwright Tests
         run: |
