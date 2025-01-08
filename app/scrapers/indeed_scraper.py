@@ -12,6 +12,8 @@ from sqlalchemy.sql import text
 import re
 from app.crud.job_queries import find_indeed_duplicates_batch
 import logging
+from undetected_playwright import Malenia
+import httpx
 
 # Enhanced User-Agents list
 user_agents = [
@@ -32,6 +34,7 @@ class UserInput:
 
 class IndeedScraper:
     def __init__(self, user_input: UserInput, max_pages: int = 10,
+                 flaresolverr_url: str = 'http://localhost:8191/v1',
                  existing_urls: Optional[set] = None,
                  job_source: Optional[JobSource] = None,
                  job_category: Optional[JobCategory] = None,
@@ -44,7 +47,8 @@ class IndeedScraper:
         self.jobs_processed = 0
         self.db_manager = db_manager  # Database manager for DB access
         self.existing_urls = existing_urls if existing_urls is not None else self.load_existing_job_urls()
-        self.logger = logger or logging.getLogger(__name__)  # Default to global logger if none passed
+        self.logger = logger or logging.getLogger(__name__)
+        self.flaresolverr_url = flaresolverr_url
 
     def get_indeed_job_key(self, url: str) -> str:
         """Extract job key from an Indeed URL."""
@@ -52,22 +56,62 @@ class IndeedScraper:
         match = re.search(r'clk\?jk=([^&]+)', url)
         return match.group(1) if match else None
 
+    def send_flaresolverr_request(self, url: str):
+        """Send a GET request with FlareSolverr using httpx"""
+        # Basic header content type header
+        r_headers = {"Content-Type": "application/json"}
+        # Request payload
+        payload = {
+            "cmd": "request.get",
+            "url": url,
+            "maxTimeout": 60000
+        }
+
+        try:
+            # Send the POST request using httpx
+            with httpx.Client(timeout=60.0) as client:
+                response = client.post(url=self.flaresolverr_url, headers=r_headers, json=payload)
+
+                # Check if request was successful
+                response.raise_for_status()
+
+                # Parse the JSON response
+                response_data = response.json()
+
+                # Check if solution exists in the response
+                if response_data.get('solution', {}).get('response'):
+                    return response_data['solution']['response']
+
+                self.logger.error(f"FlareSolverr failed to bypass URL: {url}")
+                return None
+
+        except httpx.RequestError as e:
+            self.logger.error(f"Error sending request to FlareSolverr: {e}")
+            return None
+        except json.JSONDecodeError as e:
+            self.logger.error(f"Error parsing FlareSolverr response: {e}")
+            return None
 
     def run(self):
-        """Run the scraper and iterate over pages based on max_pages."""
+        """Modified run method to use FlareSolverr"""
         with sync_playwright() as p:
-            for start in range(0, self.max_pages * 10, 10):
-                browser, page = self.launch_stealth_browser(p)
+            for start in range(40, self.max_pages * 10, 10):
+                # Use FlareSolverr to get the page content
                 page_url = f"{self.user_input.url}&start={start}"
-                self.logger.info(f"🌐 Navigating to page {start // 10 + 1}")
+                flaresolverr_content = self.send_flaresolverr_request(page_url)
+
+                if not flaresolverr_content:
+                    self.logger.error(f"❌ Failed to retrieve content for {page_url}")
+                    continue
+
+                browser, page = self.launch_stealth_browser(p)
 
                 try:
-                    page.goto(page_url, timeout=60000)
+                    # Instead of page.goto(), set the content directly
+                    page.set_content(flaresolverr_content)
                     time.sleep(random.uniform(1, 3))
 
-                    if self.handle_verification(page):
-                        print("✅ Verification completed")
-
+                    # Rest of the existing processing logic remains the same
                     job_links = self.extract_job_links(page)
 
                     if not job_links:
@@ -75,20 +119,12 @@ class IndeedScraper:
                         browser.close()
                         break
 
-                    # Get duplicates for the current batch of job links
-                    duplicate_keys = find_indeed_duplicates_batch(self.db_manager.Session(), job_links)
-
+                    # Process job links as before
                     for job_url in job_links:
-                        job_key = self.get_indeed_job_key(job_url)
-                        if job_key in duplicate_keys:
-                            self.logger.info(f"⏭️ Skipping duplicate job: {job_url}")
-                            continue
-
-                        # Process non-duplicate jobs
                         self.process_job(job_url, browser)
 
                 except Exception as e:
-                    self.logger.info(f"❌ Error on page {start}: {e}")
+                    self.logger.error(f"❌ Error on page {start}: {e}")
                 finally:
                     browser.close()
                     time.sleep(random.uniform(2, 5))
@@ -139,10 +175,73 @@ class IndeedScraper:
             )
             time.sleep(random.uniform(0.5, 1.5))
 
+    def generate_bezier_curve(self, points, steps):
+        """Generate a smooth bezier curve path for mouse movement"""
+        n = len(points) - 1
+        result = []
+        for t in range(steps):
+            t = t / (steps - 1)
+            x = y = 0
+            for i, point in enumerate(points):
+                coefficient = math.comb(n, i) * (1 - t) ** (n - i) * t ** i
+                x += coefficient * point[0]
+                y += coefficient * point[1]
+            result.append((x, y))
+        return result
+
+    def move_mouse_smoothly(self, page, end_x, end_y):
+        """Move mouse in a human-like curved path"""
+        # Start from a random position
+        start_x = random.randint(0, page.viewport_size()['width'])
+        start_y = random.randint(0, page.viewport_size()['height'])
+
+        # Generate control points for the curve
+        control_points = [
+            (start_x, start_y),
+            (start_x + (end_x - start_x) * 0.4, start_y + (end_y - start_y) * 0.2),
+            (start_x + (end_x - start_x) * 0.6, start_y + (end_y - start_y) * 0.8),
+            (end_x, end_y)
+        ]
+
+        # Generate path points
+        path = self.generate_bezier_curve(control_points, steps=50)
+
+        # Move the mouse along the path
+        for x, y in path:
+            page.mouse.move(x, y)
+            time.sleep(random.uniform(0.001, 0.002))  # Subtle speed variations
+
     def handle_verification(self, page):
-        """Handle 'Verify Human' button if it appears"""
+        """Handle 'Verify Human' button with screenshots at each step"""
         try:
-            # Wait for verification button using multiple possible selectors
+            os.makedirs('screenshots', exist_ok=True)
+            page.screenshot(path='screenshots/1_initial_page.png')
+            print("📸 Captured initial page state")
+
+            # First try to find the iframe
+            iframe_selector = 'iframe[title*="challenge"]'
+            try:
+                iframe = page.wait_for_selector(iframe_selector, timeout=5000)
+                if iframe:
+                    frame = iframe.content_frame()
+                    if frame:
+                        print("Found challenge iframe")
+                        # Try clicking in the iframe
+                        checkbox = frame.wait_for_selector('input[type="checkbox"]', timeout=5000)
+                        if checkbox:
+                            box = checkbox.bounding_box()
+                            if box:
+                                # Move to and click checkbox
+                                self.move_mouse_smoothly(frame,
+                                                         box['x'] + box['width'] / 2,
+                                                         box['y'] + box['height'] / 2)
+                                checkbox.click()
+                                time.sleep(3)
+                                return True
+            except Exception as e:
+                print(f"No iframe found, trying direct selectors: {e}")
+
+            # Try regular selectors if iframe approach fails
             verify_selectors = [
                 "button[value='Verify you are human']",
                 "input[value='Verify you are human']",
@@ -154,60 +253,73 @@ class IndeedScraper:
                 try:
                     verify_button = page.wait_for_selector(selector, timeout=5000)
                     if verify_button:
-                        print("🤖 Found verification button, clicking...")
-                        verify_button.click()
-                        time.sleep(random.uniform(2, 4))
-                        # Wait for page to load after verification
-                        page.wait_for_load_state('networkidle', timeout=10000)
-                        return True
-                except:
-                    continue
+                        print(f"🔍 Found verification button with selector: {selector}")
+                        box = verify_button.bounding_box()
+                        if box:
+                            # Move mouse smoothly to button
+                            self.move_mouse_smoothly(page,
+                                                     box['x'] + box['width'] / 2,
+                                                     box['y'] + box['height'] / 2)
+
+                            # Additional random movements near button
+                            for _ in range(random.randint(2, 4)):
+                                offset_x = random.uniform(-20, 20)
+                                offset_y = random.uniform(-20, 20)
+                                page.mouse.move(
+                                    box['x'] + box['width'] / 2 + offset_x,
+                                    box['y'] + box['height'] / 2 + offset_y
+                                )
+                                time.sleep(random.uniform(0.1, 0.3))
+
+                            # Final click
+                            verify_button.click(delay=random.uniform(50, 150))
+                            time.sleep(random.uniform(2, 4))
+                            page.wait_for_load_state('networkidle', timeout=10000)
+                            return True
+                except Exception as e:
+                    print(f"⚠️ Error with selector {selector}: {e}")
 
             return False
+
         except Exception as e:
-            print(f"❌ Error handling verification: {e}")
+            print(f"❌ Error in verification handling: {e}")
+            page.screenshot(path='screenshots/error_state.png')
             return False
-
-
 
     def launch_stealth_browser(self, playwright):
-        """Launch a stealth browser with enhanced stealth settings."""
+        """Launch a stealth browser using Malenia's stealth techniques"""
         browser = playwright.chromium.launch(
-            headless=True,
+            headless=False,
             args=[
                 "--start-maximized",
                 "--enable-webgl",
-                "--disable-blink-features=AutomationControlled",
-                "--disable-blink-features",
-                "--disable-infobars",
                 "--window-size=1920,1080",
                 "--no-sandbox",
-                "--disable-web-security",
-                "--disable-features=IsolateOrigins,site-per-process"
-            ]
+            ],
+
         )
 
         context = browser.new_context(
             user_agent=random.choice(user_agents),
-            java_script_enabled=True,
-            permissions=["clipboard-read"],
             viewport={'width': 1920, 'height': 1080},
             screen={'width': 1920, 'height': 1080},
-            has_touch=False,
-            is_mobile=False,
-            color_scheme='light',
+            java_script_enabled=True,
             locale='en-US',
             timezone_id='America/Chicago'
         )
+
+        Malenia.apply_stealth(context)
         page = context.new_page()
-        stealth_sync(page)
+
+
         return browser, page
 
     def extract_job_links(self, page):
         """Extract all job URLs from the main listing page."""
         job_links = []
         try:
-            page.wait_for_selector('a.jcs-JobTitle.css-1baag51.eu4oa1w0', timeout=15000)
+            # page.wait_for_selector('a.jcs-JobTitle.css-1baag51.eu4oa1w0', timeout=15000)
+            page.wait_for_selector('a.jcs-JobTitle.css-1baag51.eu4oa1w0', timeout=15000000)
             self.simulate_human_behavior(page)  # Add random behavior before extraction
             anchors = page.query_selector_all('a.jcs-JobTitle.css-1baag51.eu4oa1w0')
             for i, anchor in enumerate(anchors):
@@ -252,15 +364,14 @@ class IndeedScraper:
                     print(f"❌ Gave up on job URL after 3 retries: {job_url}")
 
     def get_job_details(self, browser, job_url):
-        """Extract job details with enhanced anti-blocking measures."""
         try:
             context = browser.new_context(
-                user_agent=random.choice(user_agents),  # New user agent for each job
+                user_agent=random.choice(user_agents),
                 viewport={'width': 1920, 'height': 1080},
                 screen={'width': 1920, 'height': 1080}
             )
+            Malenia.apply_stealth(context)  # Use Malenia instead of stealth_sync
             page = context.new_page()
-            stealth_sync(page)
             page.goto(job_url, timeout=30000)
             self.simulate_human_behavior(page)
             page.wait_for_load_state('networkidle', timeout=15000)

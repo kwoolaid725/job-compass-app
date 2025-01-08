@@ -13,6 +13,7 @@ import re
 from app.crud.job_queries import find_indeed_duplicates_batch
 import logging
 import math
+import httpx
 
 # Enhanced User-Agents list
 user_agents = [
@@ -32,12 +33,17 @@ class UserInput:
 
 
 class IndeedScraperEnhanced:
-    def __init__(self, user_input: UserInput, max_pages: int = 10,
+    def __init__(self, user_input: UserInput,
+                 flaresolverr_url: str = 'http://localhost:8191/v1',
+                 max_pages: int = 10,
                  existing_urls: Optional[set] = None,
                  job_source: Optional[JobSource] = None,
                  job_category: Optional[JobCategory] = None,
                  db_manager=None,
                  logger=None):
+        # Add FlareSolverr URL to the initialization
+        self.flaresolverr_url = flaresolverr_url
+        # Keep other existing initialization parameters
         self.user_input = user_input
         self.max_pages = max_pages
         self.job_source = job_source
@@ -45,6 +51,42 @@ class IndeedScraperEnhanced:
         self.jobs_processed = 0
         self.db_manager = db_manager
         self.logger = logger or logging.getLogger(__name__)
+
+    def send_flaresolverr_request(self, url: str):
+        """Send a GET request with FlareSolverr using httpx"""
+        # Basic header content type header
+        r_headers = {"Content-Type": "application/json"}
+        # Request payload
+        payload = {
+            "cmd": "request.get",
+            "url": url,
+            "maxTimeout": 60000
+        }
+
+        try:
+            # Send the POST request using httpx
+            with httpx.Client(timeout=60.0) as client:
+                response = client.post(url=self.flaresolverr_url, headers=r_headers, json=payload)
+
+                # Check if request was successful
+                response.raise_for_status()
+
+                # Parse the JSON response
+                response_data = response.json()
+
+                # Check if solution exists in the response
+                if response_data.get('solution', {}).get('response'):
+                    return response_data['solution']['response']
+
+                self.logger.error(f"FlareSolverr failed to bypass URL: {url}")
+                return None
+
+        except httpx.RequestError as e:
+            self.logger.error(f"Error sending request to FlareSolverr: {e}")
+            return None
+        except json.JSONDecodeError as e:
+            self.logger.error(f"Error parsing FlareSolverr response: {e}")
+            return None
 
     def launch_stealth_browser(self, playwright, headless=True):
         """Launch a stealth browser with enhanced Chromium stealth settings."""
@@ -202,37 +244,43 @@ class IndeedScraperEnhanced:
 
     def run(self):
         """
-        Enhanced scraping run method with headless mode
+        Enhanced scraping run method with FlareSolverr integration
         """
         with sync_playwright() as p:
             os.makedirs('screenshots', exist_ok=True)
             for start in range(0, self.max_pages * 10, 10):
                 # Use headless mode directly
-                browser, page = self.launch_stealth_browser(p, headless=False)  # Set to False to see verification
+                browser, page = self.launch_stealth_browser(p, headless=False)
                 page_url = f"{self.user_input.url}&start={start}"
                 self.logger.info(f"🌐 Navigating to page {start // 10 + 1}")
 
                 try:
-                    # Navigate to page and wait for load
-                    page.goto(page_url, timeout=60000)
+                    # Use FlareSolverr to get page content
+                    flaresolverr_content = self.send_flaresolverr_request(page_url)
+
+                    if not flaresolverr_content:
+                        self.logger.error(f"❌ Failed to retrieve content for {page_url}")
+                        browser.close()
+                        continue
+
+                    # Set the content from FlareSolverr instead of navigating
+                    page.set_content(flaresolverr_content)
                     page.wait_for_load_state('networkidle', timeout=10000)
 
                     # Take initial screenshot
                     page.screenshot(path='screenshots/1_initial_page.png')
                     self.logger.info("📸 Initial page screenshot captured")
 
-                    # Handle verification immediately
-                    time.sleep(2)  # Brief pause to let any verification popup appear
-
+                    # Handle verification if needed
+                    time.sleep(2)
                     verification_result = self.handle_verification(page)
                     if verification_result:
                         self.logger.info("✅ Verification challenge handled")
-                        # Take post-verification screenshot
                         page.screenshot(path='screenshots/5_post_verification.png')
                     else:
                         self.logger.info("ℹ️ No verification needed or verification failed")
 
-                    # Rest of your existing logic
+                    # Extract job links
                     job_links = self.extract_job_links(page)
 
                     if not job_links:
@@ -255,7 +303,6 @@ class IndeedScraperEnhanced:
 
                 except Exception as e:
                     self.logger.error(f"❌ Error on page {start}: {e}")
-                    # Take error screenshot
                     page.screenshot(path='screenshots/error_state.png')
                 finally:
                     browser.close()
