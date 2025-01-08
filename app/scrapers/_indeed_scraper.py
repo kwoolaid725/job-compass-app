@@ -303,10 +303,11 @@ class IndeedScraperEnhanced:
             self.logger.info(f"Screenshot 1 saved: {os.path.exists(screenshot_path1)}")
 
             # Add red dot marker immediately after page load
+            # Add red dot marker immediately after page load
             page_viewport = page.viewport_size
             self.logger.info(f"Viewport size: {page_viewport}")
-            estimated_x = (page_viewport['width'] / 2) - 200  # Move more left, from 100px to 200px
-            estimated_y = (page_viewport['height'] * 0.15)  # Keep the same height
+            estimated_x = (page_viewport['width'] / 2) - 150  # Move from 200px to 150px left of center
+            estimated_y = (page_viewport['height'] * 0.20)  # Move from 0.15 to 0.20 to move down
             self.logger.info(f"Estimated coordinates: x={estimated_x}, y={estimated_y}")
 
             # Fixed JavaScript evaluation syntax
@@ -322,7 +323,6 @@ class IndeedScraperEnhanced:
                 dot.style.zIndex = '2147483647';
                 document.body.appendChild(dot);
             }"""
-
             # Correct way to pass arguments to evaluate
             page.evaluate(js_code, {'x': estimated_x, 'y': estimated_y})
 
