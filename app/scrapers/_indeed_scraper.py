@@ -340,7 +340,7 @@ class IndeedScraperEnhanced:
                 # Click with force and delay
                 page.mouse.click(estimated_x, estimated_y, delay=random.uniform(50, 150))
                 self.logger.info(f"Clicked at x={estimated_x}, y={estimated_y}")
-                time.sleep(2)
+                time.sleep(5)
 
                 # Take screenshot after click
                 screenshot_path3 = os.path.join(os.getcwd(), 'screenshots', f'3_after_click_attempt_{attempt + 1}.png')
