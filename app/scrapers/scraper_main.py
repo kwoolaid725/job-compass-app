@@ -2,7 +2,7 @@ import argparse
 import logging
 import os
 from dataclasses import dataclass
-from app.scrapers.indeed_scraper import IndeedScraper
+# from app.scrapers.indeed_scraper import IndeedScraper
 from app.scrapers.linkedin_scraper import LinkedInScraper
 from app.models.job import JobSource, JobCategory
 from app.db.database_manager import DatabaseManager
@@ -83,64 +83,64 @@ def test_indeed_scraper_enhanced():
         raise
 
 
-def run_single_scraper(source: JobSource, category: JobCategory, max_pages: int):
-    """Run a single scraper for the given source and category."""
-    db_manager = DatabaseManager()
-
-    urls = {
-        'python_developer': {
-            'indeed': "https://www.indeed.com/jobs?q=python+developer&sort=date",
-            'linkedin': "https://www.linkedin.com/jobs/search/?keywords=python%20developer&f_TPR=r604800"
-        },
-        'data_engineer': {
-            'indeed': "https://www.indeed.com/jobs?q=data+engineer&sort=date",
-            'linkedin': "https://www.linkedin.com/jobs/search/?keywords=data+engineer&f_TPR=r604800"
-        },
-        'data_scientist': {
-            'indeed': "https://www.indeed.com/jobs?q=data+scientist&sort=date",
-            'linkedin': "https://www.linkedin.com/jobs/search/?keywords=data+scientist&f_TPR=r604800"
-        }
-    }
-
-    url = urls[category.name.lower()][source.name.lower()]
-    user_input = UserInput(method="scrape_webpage", url=url)
-
-    if source == JobSource.INDEED:
-        scraper = IndeedScraper(
-            user_input=user_input,
-            db_manager=db_manager,
-            job_source=source,
-            job_category=category,
-            max_pages=max_pages,
-            logger=logger
-        )
-    elif source == JobSource.LINKEDIN:
-        scraper = LinkedInScraper(
-            user_input=user_input,
-            db_manager=db_manager,
-            job_source=source,
-            job_category=category,
-            max_pages=max_pages,
-            logger=logger
-        )
-
-    logger.info(f"🚀 Starting to scrape {source.name} for {category.name} jobs...")
-    scraper.run()
-
-
-def run_all_combinations(max_pages: int):
-    """Run all source and category combinations."""
-    combinations = [
-        (JobSource.INDEED, JobCategory.PYTHON_DEVELOPER),
-        (JobSource.LINKEDIN, JobCategory.PYTHON_DEVELOPER),
-        (JobSource.INDEED, JobCategory.DATA_ENGINEER),
-        (JobSource.LINKEDIN, JobCategory.DATA_ENGINEER),
-        (JobSource.INDEED, JobCategory.DATA_SCIENTIST),
-        (JobSource.LINKEDIN, JobCategory.DATA_SCIENTIST),
-    ]
-
-    for source, category in combinations:
-        run_single_scraper(source, category, max_pages)
+# def run_single_scraper(source: JobSource, category: JobCategory, max_pages: int):
+#     """Run a single scraper for the given source and category."""
+#     db_manager = DatabaseManager()
+#
+#     urls = {
+#         'python_developer': {
+#             'indeed': "https://www.indeed.com/jobs?q=python+developer&sort=date",
+#             'linkedin': "https://www.linkedin.com/jobs/search/?keywords=python%20developer&f_TPR=r604800"
+#         },
+#         'data_engineer': {
+#             'indeed': "https://www.indeed.com/jobs?q=data+engineer&sort=date",
+#             'linkedin': "https://www.linkedin.com/jobs/search/?keywords=data+engineer&f_TPR=r604800"
+#         },
+#         'data_scientist': {
+#             'indeed': "https://www.indeed.com/jobs?q=data+scientist&sort=date",
+#             'linkedin': "https://www.linkedin.com/jobs/search/?keywords=data+scientist&f_TPR=r604800"
+#         }
+#     }
+#
+#     url = urls[category.name.lower()][source.name.lower()]
+#     user_input = UserInput(method="scrape_webpage", url=url)
+#
+#     if source == JobSource.INDEED:
+#         scraper = IndeedScraper(
+#             user_input=user_input,
+#             db_manager=db_manager,
+#             job_source=source,
+#             job_category=category,
+#             max_pages=max_pages,
+#             logger=logger
+#         )
+#     elif source == JobSource.LINKEDIN:
+#         scraper = LinkedInScraper(
+#             user_input=user_input,
+#             db_manager=db_manager,
+#             job_source=source,
+#             job_category=category,
+#             max_pages=max_pages,
+#             logger=logger
+#         )
+#
+#     logger.info(f"🚀 Starting to scrape {source.name} for {category.name} jobs...")
+#     scraper.run()
+#
+#
+# def run_all_combinations(max_pages: int):
+#     """Run all source and category combinations."""
+#     combinations = [
+#         (JobSource.INDEED, JobCategory.PYTHON_DEVELOPER),
+#         (JobSource.LINKEDIN, JobCategory.PYTHON_DEVELOPER),
+#         (JobSource.INDEED, JobCategory.DATA_ENGINEER),
+#         (JobSource.LINKEDIN, JobCategory.DATA_ENGINEER),
+#         (JobSource.INDEED, JobCategory.DATA_SCIENTIST),
+#         (JobSource.LINKEDIN, JobCategory.DATA_SCIENTIST),
+#     ]
+#
+#     for source, category in combinations:
+#         run_single_scraper(source, category, max_pages)
 
 
 # def main():
