@@ -273,9 +273,9 @@ class IndeedScraperEnhanced:
                     # Navigate to page
                     page.goto(page_url, timeout=60000)
 
-                    # Take a screenshot
-                    screenshot_path = 'screenshots/indeed_page_load.png'
+                    screenshot_path = 'indeed_page_load.png'
                     page.screenshot(path=screenshot_path)
+
                     self.logger.info(f"Screenshot saved to {screenshot_path}")
 
                     time.sleep(random.uniform(1, 3))

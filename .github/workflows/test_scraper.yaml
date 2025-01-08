@@ -58,11 +58,13 @@ jobs:
         run: |
           python -m app.scrapers.scraper_main --test-indeed
 
-      - name: Upload screenshots
+      - name: Upload screenshot
         uses: actions/upload-artifact@v3
-        if: failure()
+        if: always()
         with:
-          name: indeed-scraper-screenshots
+          name: indeed-scraper-screenshot
           path: |
-            *.png
+            indeed_page_load.png
+            indeed_no_links.png
+            indeed_error.png
           retention-days: 3
