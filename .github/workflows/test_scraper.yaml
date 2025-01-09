@@ -24,12 +24,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cleanup existing containers
+      - name: Install Docker Compose
         run: |
-          # Remove any existing containers with the name flaresolverr
-          docker rm -f flaresolverr || true
-          # Prune any dangling containers
-          docker container prune -f
+          sudo apt-get update
+          sudo apt-get install -y docker-compose
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -61,21 +59,12 @@ jobs:
 
       - name: Start Services
         run: |
-          # Create Docker network
-          docker network create job_network || true
-          
-          # Run FlareSolverr as a standalone service
-          docker run -d \
-            --name flaresolverr \
-            --network job_network \
-            -p 8191:8191 \
-            -e LOG_LEVEL=debug \
-            -e LOG_HTML=false \
-            ghcr.io/flaresolverr/flaresolverr:latest
-          
-          # Start other services using Docker Compose
+          # Verify Docker Compose version
+          docker-compose version
+
+          # Start services
           docker-compose up -d
-          
+
           # Wait for services to be ready
           sleep 30
 
@@ -85,7 +74,7 @@ jobs:
           docker logs flaresolverr
           
           # Check service connectivity
-          docker run --network job_network \
+          docker run --network job-compass_job_network \
             curlimages/curl -v http://flaresolverr:8191/health || true
 
       - name: Run Enhanced Indeed Scraper Test
@@ -116,7 +105,4 @@ jobs:
         if: always()
         run: |
           docker-compose down
-          docker stop flaresolverr || true
-          docker rm flaresolverr || true
-          docker network rm job_network || true
         continue-on-error: true
