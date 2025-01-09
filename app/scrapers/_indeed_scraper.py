@@ -118,16 +118,14 @@ class IndeedScraperEnhanced:
         return False
 
     def send_flaresolverr_request(self, url: str, max_retries: int = 3):
-        """Send a GET request with FlareSolverr using requests with extensive error handling"""
+        """Send a request to FlareSolverr with enhanced timeout and error handling"""
         r_headers = {"Content-Type": "application/json"}
         payload = {
-            "cmd": "request.get",  # Changed back to GET
+            "cmd": "request.get",
             "url": url,
-            "maxTimeout": 180000,  # 3 minutes
+            "maxTimeout": 300000,  # Increased to 5 minutes
             "returnOnlySolution": False,
-            "sessions": True,
-            # For POST requests, you would add:
-            # "postData": "",  # Empty string for GET requests
+            "sessions": True
         }
 
         # Comprehensive connection methods
@@ -148,16 +146,12 @@ class IndeedScraperEnhanced:
 
                     import requests
 
-                    # Verbose logging of payload and URL
-                    self.logger.info(f"Connection URL: {connection_url}")
-                    self.logger.info(f"Payload: {json.dumps(payload)}")
-
-                    # Use POST method for FlareSolverr
+                    # Increased timeout values
                     response = requests.post(
                         connection_url,
                         headers=r_headers,
                         json=payload,
-                        timeout=(30, 180)  # (connect, read) timeouts
+                        timeout=(45, 300)  # (connect, read) timeouts
                     )
 
                     # Log full response details
@@ -178,16 +172,20 @@ class IndeedScraperEnhanced:
                         self.logger.error(f"Non-200 status code from {connection_url}: {response.status_code}")
                         self.logger.error(f"Response Text: {response.text}")
 
-                except requests.RequestException as conn_error:
+                except requests.Timeout as timeout_error:
+                    self.logger.error(f"Timeout error with {connection_url}: {timeout_error}")
+                    last_error = timeout_error
+                except requests.ConnectionError as conn_error:
                     self.logger.error(f"Connection error with {connection_url}: {conn_error}")
                     last_error = conn_error
                 except Exception as unexpected_error:
                     self.logger.error(f"Unexpected error with {connection_url}: {unexpected_error}")
                     last_error = unexpected_error
 
-            # Exponential backoff
-            sleep_time = 30 * (attempt + 1)
-            self.logger.warning(f"Attempt {attempt + 1} failed. Waiting {sleep_time} seconds before retry.")
+            # Exponential backoff with jitter
+            import random
+            sleep_time = (30 * (attempt + 1)) + random.uniform(0, 15)
+            self.logger.warning(f"Attempt {attempt + 1} failed. Waiting {sleep_time:.2f} seconds before retry.")
             time.sleep(sleep_time)
 
         self.logger.error("All FlareSolverr connection attempts failed")

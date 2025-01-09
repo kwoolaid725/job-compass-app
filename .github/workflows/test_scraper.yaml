@@ -117,6 +117,25 @@ jobs:
           echo "Docker container logs:"
           docker logs flaresolverr
 
+      - name: Detailed FlareSolverr Debugging
+        run: |
+          echo "FlareSolverr Service Status:"
+          docker ps | grep flaresolverr
+          
+          echo "FlareSolverr Logs:"
+          docker logs flaresolverr
+          
+          echo "Testing FlareSolverr Connectivity:"
+          curl -v -X POST http://localhost:8191/v1 \
+            -H "Content-Type: application/json" \
+            -d '{
+              "cmd": "request.get",
+              "url": "https://www.indeed.com/jobs?q=python+developer",
+              "maxTimeout": 300000,
+              "returnOnlySolution": false,
+              "sessions": true
+            }'
+
       - name: Network Diagnostics
         run: |
           echo "Hostname resolution:"
