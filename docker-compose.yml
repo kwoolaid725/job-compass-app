@@ -24,8 +24,11 @@ services:
     environment:
       - LOG_LEVEL=debug
       - LOG_HTML=true
-      - CAPTCHA_SOLVER=none
-      - TZ=UTC
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8191/v1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     ports:
       - "8191:8191"
     networks:

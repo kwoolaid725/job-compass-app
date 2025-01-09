@@ -63,30 +63,35 @@ jobs:
           playwright install chromium
           playwright install-deps 
 
-      - name: Create Docker Network and Start FlareSolverr
+      - name: Docker Network Setup
         run: |
+          # Create network if it doesn't exist
           docker network create job_network || true
-          docker-compose up -d --force-recreate
 
-          # Wait for FlareSolverr to be ready
-          echo "Waiting for FlareSolverr to be ready..."
-          MAX_ATTEMPTS=20
-          ATTEMPT=0
+          # List all networks
+          docker network ls
 
-          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
-            echo "Checking FlareSolverr connectivity (Attempt $((ATTEMPT+1)))..."
+          # Inspect bridge network
+          docker network inspect bridge
 
-            if docker exec flaresolverr curl -s http://localhost:8191/health | grep -q "ok"; then
-              echo "✅ FlareSolverr is ready"
-              break
-            fi
+      - name: Start FlareSolverr
+        run: |
+          # Start FlareSolverr with specific network
+          docker-compose up -d flaresolverr
 
-            docker ps | grep flaresolverr
-            docker logs flaresolverr
+          # Wait for container to be ready
+          sleep 10
 
-            sleep 10
-            ATTEMPT=$((ATTEMPT+1))
-          done
+          # Get container IP
+          FLARESOLVERR_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' flaresolverr)
+          echo "FlareSolverr container IP: $FLARESOLVERR_IP"
+
+          # Test FlareSolverr directly
+          curl -v "http://$FLARESOLVERR_IP:8191/v1" || true
+          curl -v "http://localhost:8191/v1" || true
+
+          # Check logs
+          docker logs flaresolverr
 
       - name: Check FlareSolverr Service
         run: |
