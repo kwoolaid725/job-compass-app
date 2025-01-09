@@ -39,6 +39,15 @@ class UserInput:
     email: str = os.getenv('LINKEDIN_EMAIL')
     password: str = os.getenv('LINKEDIN_PASSWORD')
 
+def parse_arguments():
+    parser = argparse.ArgumentParser(description='Job Scraper Main Script')
+    parser.add_argument('--test-indeed', action='store_true',
+                        help='Run Indeed scraper test')
+    parser.add_argument('--category', type=str,
+                        choices=['python_developer', 'data_engineer', 'data_scientist'],
+                        help='Job category to scrape')
+    return parser.parse_args()
+
 def test_indeed_scraper_enhanced():
     """
     Temporary test function for IndeedScraperEnhanced
@@ -174,23 +183,16 @@ def test_indeed_scraper_enhanced():
 #         exit(1)
 
 def main():
-    parser = argparse.ArgumentParser(description="Job Scraper")
-    parser.add_argument("--test-indeed", action="store_true",
-                        help="Run test for Enhanced Indeed Scraper")
+    args = parse_arguments()
 
-    args = parser.parse_args()
-
-    try:
-        if args.test_indeed:
-            # Run the test function for Enhanced Indeed Scraper
-            test_indeed_scraper_enhanced()
+    if args.test_indeed:
+        # Your Indeed scraping logic here
+        if args.category:
+            print(f"Running Indeed scraper for {args.category} category")
+            # Add your specific scraping logic based on category
         else:
-            # Default scraper logic from the original script
-            parser.print_help()
+            print("Running Indeed scraper with default category")
 
-    except Exception as e:
-        logger.error(f"❌ Error in main execution: {e}")
-        exit(1)
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
