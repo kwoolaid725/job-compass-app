@@ -121,19 +121,20 @@ class IndeedScraperEnhanced:
         """Send a GET request with FlareSolverr using requests with extensive error handling"""
         r_headers = {"Content-Type": "application/json"}
         payload = {
-            "cmd": "request.post",  # Change to POST method
+            "cmd": "request.get",  # Changed back to GET
             "url": url,
-            "maxTimeout": 180000,
+            "maxTimeout": 180000,  # 3 minutes
             "returnOnlySolution": False,
-            "sessions": True
+            "sessions": True,
+            # For POST requests, you would add:
+            # "postData": "",  # Empty string for GET requests
         }
 
         # Comprehensive connection methods
         connection_methods = [
             'http://localhost:8191/v1',
             'http://127.0.0.1:8191/v1',
-            'http://host.docker.internal:8191/v1',
-            'http://172.17.0.1:8191/v1',  # Default Docker bridge network gateway
+            'http://172.17.0.1:8191/v1',
         ]
 
         # Remove duplicate connection methods while preserving order
@@ -145,14 +146,13 @@ class IndeedScraperEnhanced:
                 try:
                     self.logger.info(f"Attempt {attempt + 1}, Trying URL: {connection_url}")
 
-                    # Use requests for more straightforward connection
                     import requests
 
                     # Verbose logging of payload and URL
                     self.logger.info(f"Connection URL: {connection_url}")
                     self.logger.info(f"Payload: {json.dumps(payload)}")
 
-                    # Explicitly use POST method
+                    # Use POST method for FlareSolverr
                     response = requests.post(
                         connection_url,
                         headers=r_headers,
