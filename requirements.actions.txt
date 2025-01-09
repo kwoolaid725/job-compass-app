@@ -1,6 +1,7 @@
 playwright==1.40.0
 playwright-stealth==1.0.6
-undetected-playwright==0.1.1
 httpx==0.25.2
 psycopg2-binary==2.9.9
 sqlalchemy==2.0.23
+undetected-chromedriver==3.5.5
+undetected-playwright==0.3.0
