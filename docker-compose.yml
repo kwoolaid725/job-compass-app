@@ -1,122 +1,37 @@
-name: Test Enhanced Indeed Scraper
+version: '3.8'
 
-on:
-  workflow_dispatch:
-    inputs:
-      category:
-        description: 'Job category to test'
-        required: false
-        default: 'python_developer'
-        type: choice
-        options:
-          - python_developer
-          - data_engineer
-          - data_scientist
+services:
+  db:
+    image: postgres:15
+    container_name: job_postings
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=sozjavbxj
+      - POSTGRES_DB=job_postings
+    command: ["postgres", "-c", "listen_addresses=*"]
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - job_network
 
-jobs:
-  test-enhanced-indeed-scraper:
-    runs-on: ubuntu-latest
-    env:
-      LINKEDIN_EMAIL: ${{ secrets.LINKEDIN_EMAIL }}
-      LINKEDIN_PASSWORD: ${{ secrets.LINKEDIN_PASSWORD }}
-      FLARESOLVERR_URL: http://flaresolverr:8191/v1
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    ports:
+      - "8191:8191"
+    environment:
+      - LOG_LEVEL=debug
+      - LOG_HTML=true
+      - TZ=Europe/London
+    restart: always
+    networks:
+      - job_network
 
-    steps:
-      - uses: actions/checkout@v4
+networks:
+  job_network:
+    driver: bridge
 
-      - name: Cleanup existing containers
-        run: |
-          # Remove any existing containers with the name flaresolverr
-          docker rm -f flaresolverr || true
-          # Prune any dangling containers
-          docker container prune -f
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            xvfb \
-            libgbm-dev \
-            libgtk-3-0 \
-            libnss3 \
-            libxss1 \
-            libatk-bridge2.0-0 \
-            libx11-xcb1 \
-            libxcb-dri3-0 \
-            libdrm2 \
-            libgbm1
-
-      - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip setuptools wheel
-          pip install -r requirements.actions.txt
-          pip install playwright httpx
-          playwright install chromium
-          playwright install-deps
-
-      - name: Start Services
-        run: |
-          # Create Docker network
-          docker network create job_network || true
-          
-          # Run FlareSolverr as a standalone service
-          docker run -d \
-            --name flaresolverr \
-            --network job_network \
-            -p 8191:8191 \
-            -e LOG_LEVEL=debug \
-            -e LOG_HTML=false \
-            ghcr.io/flaresolverr/flaresolverr:latest
-          
-          # Start other services using Docker Compose
-          docker-compose up -d
-          
-          # Wait for services to be ready
-          sleep 30
-
-      - name: Verify Services
-        run: |
-          docker ps
-          docker logs flaresolverr
-          
-          # Check service connectivity
-          docker run --network job_network \
-            curlimages/curl -v http://flaresolverr:8191/health || true
-
-      - name: Run Enhanced Indeed Scraper Test
-        run: |
-          xvfb-run --auto-servernum \
-            --server-args="-screen 0 1920x1080x24" \
-            python -m app.scrapers.scraper_main --test-indeed
-
-      - name: List generated files
-        if: always()
-        run: |
-          echo "Current directory contents:"
-          ls -la
-          echo "Screenshots directory contents:"
-          ls -la screenshots/ || echo "No screenshots directory"
-
-      - name: Upload screenshots
-        uses: actions/upload-artifact@v3
-        if: always()
-        with:
-          name: indeed-scraper-screenshots
-          path: |
-            screenshots/**/*.png
-            *.png
-          if-no-files-found: warn
-
-      - name: Cleanup Docker services
-        if: always()
-        run: |
-          docker-compose down
-          docker stop flaresolverr || true
-          docker rm flaresolverr || true
-          docker network rm job_network || true
-        continue-on-error: true
+volumes:
+  pgdata:
