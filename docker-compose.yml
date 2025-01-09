@@ -34,9 +34,10 @@ services:
       - LOG_LEVEL=debug
       - LOG_HTML=true
       - TZ=Europe/London
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    network_mode: host  # This can help with network resolution
     restart: always
-    networks:
-      - job_network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8191/health"]
       interval: 30s

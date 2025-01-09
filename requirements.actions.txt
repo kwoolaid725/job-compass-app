@@ -5,6 +5,7 @@ sqlalchemy
 psycopg2-binary
 python-dotenv
 httpx
+netifaces
 
 # Additional recommended dependencies for web scraping
 beautifulsoup4

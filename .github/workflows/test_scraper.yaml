@@ -99,25 +99,24 @@ jobs:
             exit 1
           fi
 
-      - name: Debug Network Configuration
+      - name: Network Diagnostics
         run: |
-          echo "Network interfaces:"
-          ip addr
-
-          echo "Docker networks:"
-          docker network ls
-
-          echo "Inspecting Docker network 'job_network':"
-          docker network inspect job_network || true
-
-          echo "Current Docker containers:"
-          docker ps
-
-          echo "Resolving FlareSolverr via nslookup:"
-          docker run --network job_network nicolaka/netshoot nslookup flaresolverr || echo "Failed to resolve FlareSolverr"
-
-          echo "Current DNS configuration:"
+          echo "Hostname resolution:"
+          hostname
+          hostname -I
+          
+          echo "DNS Configuration:"
           cat /etc/resolv.conf
+          
+          echo "Docker Networks:"
+          docker network ls
+          docker network inspect job_network || true
+          
+          echo "Docker Containers:"
+          docker ps
+          
+          echo "Checking FlareSolverr container:"
+          docker inspect flaresolverr
           
       - name: Advanced Network Debugging
         run: |

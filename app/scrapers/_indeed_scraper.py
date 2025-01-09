@@ -14,6 +14,8 @@ from app.crud.job_queries import find_indeed_duplicates_batch
 import logging
 import math
 import httpx
+import socket
+import netifaces
 
 # Enhanced User-Agents list
 user_agents = [
@@ -126,95 +128,114 @@ class IndeedScraperEnhanced:
             "sessions": True
         }
 
-        for attempt in range(max_retries):
+        # Add more connection methods based on network configuration
+        connection_methods = [
+            self.flaresolverr_url,
+            'http://localhost:8191/v1',
+            'http://127.0.0.1:8191/v1',
+            'http://flaresolverr:8191/v1'
+        ]
+
+        # Try to resolve additional network IPs
+        try:
+
+
+            # Attempt to resolve FlareSolverr IP
             try:
-                # Extensive logging
-                self.logger.info(f"FlareSolverr URL: {self.flaresolverr_url}")
-                self.logger.info(f"Payload: {json.dumps(payload)}")
+                flaresolverr_ip = socket.gethostbyname('flaresolverr')
+                connection_methods.append(f'http://{flaresolverr_ip}:8191/v1')
+                self.logger.info(f"Resolved flaresolverr IP: {flaresolverr_ip}")
+            except Exception as dns_error:
+                self.logger.error(f"DNS resolution error for flaresolverr: {dns_error}")
 
-                # Try multiple connection methods with IP resolution
-                connection_methods = [
-                    self.flaresolverr_url,
-                    'http://localhost:8191/v1',
-                    'http://127.0.0.1:8191/v1',
-                    'http://flaresolverr:8191/v1'
-                ]
-
-                # Attempt to resolve IP for flaresolverr
+            # Add IPs from network interfaces
+            for interface in netifaces.interfaces():
                 try:
-                    import socket
-                    flaresolverr_ip = socket.gethostbyname('flaresolverr')
-                    connection_methods.append(f'http://{flaresolverr_ip}:8191/v1')
-                    self.logger.info(f"Resolved flaresolverr IP: {flaresolverr_ip}")
-                except Exception as dns_error:
-                    self.logger.error(f"DNS resolution error: {dns_error}")
+                    addrs = netifaces.ifaddresses(interface)
+                    if netifaces.AF_INET in addrs:
+                        ip = addrs[netifaces.AF_INET][0]['addr']
+                        connection_methods.append(f'http://{ip}:8191/v1')
+                except Exception as e:
+                    self.logger.error(f"Error getting IP for interface {interface}: {e}")
 
-                last_error = None
-                for connection_url in connection_methods:
-                    try:
-                        # Use explicit timeout parameters
-                        with httpx.Client(
-                                timeout=httpx.Timeout(
-                                    connect=30.0,  # Connection timeout
-                                    read=180.0,  # Read timeout
-                                    write=30.0,  # Write timeout
-                                    pool=60.0  # Pool timeout
-                                ),
-                                # Add transport to bypass DNS issues
-                                transport=httpx.HTTPTransport(
-                                    retries=3,
-                                    verify=False  # Disable SSL verification if needed
-                                )
-                        ) as client:
-                            # Additional network diagnostics
-                            try:
-                                import subprocess
-                                # Check network configuration
-                                network_check = subprocess.run(
-                                    ['ip', 'addr'],
-                                    capture_output=True,
-                                    text=True,
-                                    timeout=10
-                                )
-                                self.logger.info(f"Network configuration:\n{network_check.stdout}")
-                            except Exception as network_diag_error:
-                                self.logger.error(f"Network diagnostics error: {network_diag_error}")
+        except ImportError:
+            self.logger.warning("netifaces module not available for additional IP resolution")
+        except Exception as general_error:
+            self.logger.error(f"Unexpected error in IP resolution: {general_error}")
 
-                            response = client.post(
-                                url=connection_url,
-                                headers=r_headers,
-                                json=payload,
-                                follow_redirects=True
+        # Remove duplicates while preserving order
+        connection_methods = list(dict.fromkeys(connection_methods))
+
+        for attempt in range(max_retries):
+            last_error = None
+            for connection_url in connection_methods:
+                try:
+                    # Extensive logging
+                    self.logger.info(f"Attempt {attempt + 1}, Trying URL: {connection_url}")
+                    self.logger.info(f"Payload: {json.dumps(payload)}")
+
+                    # Use more flexible timeout and transport settings
+                    with httpx.Client(
+                            timeout=httpx.Timeout(
+                                connect=45.0,  # Increased connection timeout
+                                read=240.0,  # Increased read timeout
+                                write=45.0,  # Increased write timeout
+                                pool=90.0  # Increased pool timeout
+                            ),
+                            transport=httpx.HTTPTransport(
+                                retries=3,
+                                verify=False  # Disable SSL verification if needed
                             )
+                    ) as client:
+                        # Network diagnostics (optional, can be commented out in production)
+                        try:
+                            import subprocess
+                            network_check = subprocess.run(
+                                ['ip', 'addr'],
+                                capture_output=True,
+                                text=True,
+                                timeout=10
+                            )
+                            self.logger.debug(f"Network configuration:\n{network_check.stdout}")
+                        except Exception as network_diag_error:
+                            self.logger.error(f"Network diagnostics error: {network_diag_error}")
 
-                            # Log connection details
-                            self.logger.info(f"Using connection URL: {connection_url}")
-                            self.logger.info(f"Response status: {response.status_code}")
+                        # Make the request
+                        response = client.post(
+                            url=connection_url,
+                            headers=r_headers,
+                            json=payload,
+                            follow_redirects=True
+                        )
 
-                            response.raise_for_status()
+                        # Detailed logging
+                        self.logger.info(f"Response status from {connection_url}: {response.status_code}")
 
-                            response_data = response.json()
+                        response.raise_for_status()
+                        response_data = response.json()
 
-                            # Validate response
-                            if response_data.get('solution', {}).get('response'):
-                                return response_data['solution']['response']
+                        # Validate response
+                        if response_data.get('solution', {}).get('response'):
+                            self.logger.info(f"Successfully retrieved response from {connection_url}")
+                            return response_data['solution']['response']
 
-                            self.logger.warning(f"Invalid response from {connection_url}: {response_data}")
+                        self.logger.warning(f"Invalid response from {connection_url}: {response_data}")
 
-                    except Exception as conn_error:
-                        self.logger.error(f"Error with {connection_url}: {conn_error}")
-                        last_error = conn_error
+                except httpx.RequestError as conn_error:
+                    self.logger.error(f"Connection error with {connection_url}: {conn_error}")
+                    last_error = conn_error
+                except Exception as unexpected_error:
+                    self.logger.error(f"Unexpected error with {connection_url}: {unexpected_error}")
+                    last_error = unexpected_error
 
-                # If all connection methods fail
-                if last_error:
-                    raise last_error
+            # Exponential backoff
+            if last_error:
+                sleep_time = 30 * (attempt + 1)
+                self.logger.warning(f"Attempt {attempt + 1} failed. Waiting {sleep_time} seconds before retry.")
+                time.sleep(sleep_time)
 
-            except Exception as e:
-                self.logger.error(f"FlareSolverr request error (attempt {attempt + 1}): {e}")
-                time.sleep(30 * (attempt + 1))
-
-        self.logger.error("All FlareSolverr attempts failed")
-        return None
+        self.logger.error("All FlareSolverr connection attempts failed")
+        raise ConnectionError("Could not connect to FlareSolverr after all attempts")
 
     def launch_stealth_browser(self, playwright, headless=True):
         """Launch a stealth browser with enhanced Chromium stealth settings."""
