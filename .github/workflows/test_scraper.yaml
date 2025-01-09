@@ -19,6 +19,7 @@ jobs:
     env:
       LINKEDIN_EMAIL: ${{ secrets.LINKEDIN_EMAIL }}
       LINKEDIN_PASSWORD: ${{ secrets.LINKEDIN_PASSWORD }}
+      FLARESOLVERR_URL: http://flaresolverr:8191/v1
 
     steps:
       - uses: actions/checkout@v4
@@ -33,111 +34,62 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             xvfb \
+            libgbm-dev \
+            libgtk-3-0 \
             libnss3 \
             libxss1 \
             libatk-bridge2.0-0 \
-            libgbm-dev \
-            libgtk-3-0 \
-            libxshmfence-dev \
-            docker-compose
+            libx11-xcb1 \
+            libxcb-dri3-0 \
+            libdrm2 \
+            libgbm1
 
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel
           pip install -r requirements.actions.txt
           pip install playwright httpx
-          playwright install --with-deps
+          playwright install chromium
+          playwright install-deps
 
       - name: Start Docker services
         run: |
+          # Ensure Docker network is created
+          docker network create job_network || true
+          
+          # Run FlareSolverr as a standalone service
+          docker run -d \
+            --name flaresolverr \
+            --network job_network \
+            -p 8191:8191 \
+            -e LOG_LEVEL=error \
+            -e LOG_HTML=false \
+            ghcr.io/flaresolverr/flaresolverr:latest
+          
+          # Start other services
           docker-compose up -d
           
-          # Extended service check
-          max_attempts=20
-          attempt=0
-          
-          while [ $attempt -lt $max_attempts ]; do
-            echo "Checking FlareSolverr service (attempt $((attempt + 1))/$max_attempts)"
-          
-            # Verbose network diagnostics
-            docker network inspect job-compass_job_network
-          
-            # Check Docker container details
-            docker inspect flaresolverr
-          
-            # Check Docker logs
-            docker logs flaresolverr
-          
-            # Network debugging
-            docker run --network job-compass_job_network curlimages/curl \
-              -v http://flaresolverr:8191/health || true
-          
-            # Try direct Docker container exec health check
-            docker exec flaresolverr curl -v http://localhost:8191/health || true
-          
-            # Attempt to ping the container
-            docker run --network job-compass_job_network \
-              nicolaka/netshoot ping -c 4 flaresolverr || true
-          
-            # Check port listening
-            docker run --network job-compass_job_network \
-              nicolaka/netshoot nc -zv flaresolverr 8191 || true
-          
-            # Advanced network troubleshooting
-            docker run --network job-compass_job_network \
-              nicolaka/netshoot /bin/sh -c "
-                ip addr;
-                ip route;
-                cat /etc/resolv.conf;
-                ping -c 4 flaresolverr;
-                nc -zv flaresolverr 8191
-              " || true
-          
-            # Test connectivity using Docker network
-            response=$(docker run --network job-compass_job_network \
-              curlimages/curl -s -X POST http://flaresolverr:8191/v1 \
-              -H "Content-Type: application/json" \
-              -d '{"cmd":"test"}')
-          
-            echo "FlareSolverr test response: $response"
-          
-            # Check if response indicates service is ready
-            if echo "$response" | grep -q "ok"; then
-              echo "FlareSolverr service is ready"
-              break
-            fi
-          
-            sleep 15
-            attempt=$((attempt + 1))
-          done
-          
-          if [ $attempt -eq $max_attempts ]; then
-            echo "FlareSolverr failed to become ready after $max_attempts attempts"
-            exit 1
-          fi
+          # Wait for services to be ready
+          sleep 30
 
-      - name: Check Service Readiness
+      - name: Verify FlareSolverr Service
         run: |
-          # Verify port is actually listening
-          sudo netstat -tuln | grep 8191 || echo "Port 8191 not listening"
-          # Additional network diagnostics
-          nc -zv localhost 8191
-
-      - name: Debug Environment
-        run: |
-          echo "Python version:"
-          python --version
-          echo "Playwright version:"
-          pip show playwright
-          echo "Docker Compose services:"
-          docker-compose ps
+          # Check FlareSolverr service
+          docker ps
+          docker logs flaresolverr
+          
+          # Verify service connectivity
+          docker run --network job_network \
+            curlimages/curl -s -X POST http://flaresolverr:8191/v1 \
+            -H "Content-Type: application/json" \
+            -d '{"cmd":"sessions.list"}'
 
       - name: Run Enhanced Indeed Scraper Test
-        env:
-          # Ensure the scraper uses localhost
-          FLARESOLVERR_URL: http://localhost:8191/v1
         run: |
-          xvfb-run --auto-servernum --server-args="-screen 0 1280x960x24" python -m app.scrapers.scraper_main --test-indeed
+          # Use Xvfb with larger virtual screen
+          xvfb-run --auto-servernum \
+            --server-args="-screen 0 1920x1080x24" \
+            python -m app.scrapers.scraper_main --test-indeed
 
       - name: List generated files
         if: always()
@@ -161,3 +113,6 @@ jobs:
         if: always()
         run: |
           docker-compose down
+          docker stop flaresolverr
+          docker rm flaresolverr
+          docker network rm job_network

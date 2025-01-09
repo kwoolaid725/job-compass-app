@@ -34,15 +34,18 @@ class UserInput:
 
 class IndeedScraperEnhanced:
     def __init__(self, user_input: UserInput,
-                 flaresolverr_url: str = 'http://localhost:8191/v1',
+                 flaresolverr_url: Optional[str] = None,
                  max_pages: int = 10,
                  existing_urls: Optional[set] = None,
                  job_source: Optional[JobSource] = None,
                  job_category: Optional[JobCategory] = None,
                  db_manager=None,
                  logger=None):
-        # Add FlareSolverr URL to the initialization
-        self.flaresolverr_url = flaresolverr_url
+        # Retrieve FlareSolverr URL from environment or use provided/default value
+        self.flaresolverr_url = flaresolverr_url or os.environ.get(
+            'FLARESOLVERR_URL',
+            'http://localhost:8191/v1'
+        )
         # Keep other existing initialization parameters
         self.user_input = user_input
         self.max_pages = max_pages
@@ -69,8 +72,9 @@ class IndeedScraperEnhanced:
                 self.logger.info(f"FlareSolverr URL: {self.flaresolverr_url}")
                 self.logger.info(f"Payload: {json.dumps(payload)}")
 
-                # Try multiple connection methods
+                # Try multiple connection methods based on the configured URL
                 connection_methods = [
+                    self.flaresolverr_url,
                     'http://localhost:8191/v1',
                     'http://127.0.0.1:8191/v1',
                     'http://flaresolverr:8191/v1'
