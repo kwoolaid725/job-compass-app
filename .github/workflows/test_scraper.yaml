@@ -2,8 +2,8 @@ name: Job Scraper Cron
 
 on:
   schedule:
-    - cron: '0 */6 * * *'  # Runs every 6 hours
-  workflow_dispatch:  # Allows manual triggering
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
 
 env:
   DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
@@ -13,19 +13,13 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        job_category: [data_engineer, python_developer]
+        job_category: [data_engineer, python_developer, data_scientist]
 
     steps:
     - uses: actions/checkout@v3
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
-
-    - name: Verify requirements file
-      run: |
-        ls -la
-        echo "Contents of requirements.actions.txt:"
-        cat requirements.actions.txt
 
     - name: Install Docker Compose
       run: |
@@ -39,34 +33,32 @@ jobs:
         mkdir -p error_screenshots
         chmod 777 data error_screenshots
 
-    - name: Build with debug output
-      run: docker-compose build --progress=plain scraper
-
     - name: Start services
       run: |
+        docker-compose pull
         docker-compose up -d db flaresolverr
-        echo "Waiting for services to be healthy..."
-        
-        # Wait for services to be ready
-        attempts=0
-        max_attempts=30
-        while [ $attempts -lt $max_attempts ]; do
-          if docker-compose ps | grep -q "healthy"; then
-            echo "Services are healthy"
-            break
-          fi
-          attempts=$((attempts + 1))
-          echo "Attempt $attempts/$max_attempts: Waiting for services..."
-          sleep 10
-        done
-        
-        if [ $attempts -eq $max_attempts ]; then
-          echo "Services failed to become healthy"
-          exit 1
-        fi
+        echo "Waiting for services to start..."
+        sleep 30  # Give services time to initialize
+
+    - name: Check service logs and status
+      run: |
+        echo "Docker Compose Status:"
+        docker-compose ps
+        echo "FlareSolverr Logs:"
+        docker-compose logs flaresolverr
+        echo "Database Logs:"
+        docker-compose logs db
+
+    - name: Test FlareSolverr endpoint
+      run: |
+        echo "Testing FlareSolverr endpoint..."
+        curl -v http://localhost:8191/v1
+        echo "Testing FlareSolverr health..."
+        docker-compose exec -T flaresolverr wget --spider -q http://localhost:8191/v1
 
     - name: Run scraper
       run: |
+        echo "Starting scraper..."
         docker-compose run --rm scraper python -m app.scrapers.scraper_main \
           --source indeed \
           --category ${{ matrix.job_category }}
@@ -90,5 +82,9 @@ jobs:
     - name: Cleanup
       if: always()
       run: |
+        echo "Final service status:"
+        docker-compose ps
+        echo "Final FlareSolverr logs:"
+        docker-compose logs flaresolverr
         docker-compose down -v
         docker system prune -f
