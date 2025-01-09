@@ -183,16 +183,28 @@ def test_indeed_scraper_enhanced():
 #         exit(1)
 
 def main():
+    # parser = argparse.ArgumentParser(description="Job Scraper")
+    # parser.add_argument("--test-indeed", action="store_true",
+    #                     help="Run test for Enhanced Indeed Scraper")
+    #
+    # args = parser.parse_args()
+
     args = parse_arguments()
 
-    if args.test_indeed:
-        # Your Indeed scraping logic here
-        if args.category:
-            print(f"Running Indeed scraper for {args.category} category")
-            # Add your specific scraping logic based on category
-        else:
-            print("Running Indeed scraper with default category")
+    try:
+        if args.test_indeed:
+            # Run the test function for Enhanced Indeed Scraper
+            test_indeed_scraper_enhanced()
+            if args.category:
+                print(f"Running Indeed scraper for {args.category} category")
+                # Add your specific scraping logic based on category
+            else:
+                print("Running Indeed scraper with default category")
 
 
-if __name__ == '__main__':
+    except Exception as e:
+        logger.error(f"❌ Error in main execution: {e}")
+        exit(1)
+
+if __name__ == "__main__":
     main()
