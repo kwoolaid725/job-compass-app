@@ -23,18 +23,18 @@ services:
     image: ghcr.io/flaresolverr/flaresolverr:latest
     container_name: flaresolverr
     environment:
-      - LOG_LEVEL=debug  # Changed to debug for more information
-      - LOG_HTML=true    # Enable HTML logging
+      - LOG_LEVEL=debug
+      - LOG_HTML=true
       - TZ=Europe/London
     ports:
       - "8191:8191"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8191/v1"]
+      test: ["CMD", "curl", "-X", "POST", "-H", "Content-Type: application/json", "-d", '{"cmd": "sessions.list"}', "http://localhost:8191/v1"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 30s  # Give it more time to start up initially
+      start_period: 30s
 
   scraper:
     build:

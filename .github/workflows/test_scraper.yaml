@@ -52,9 +52,23 @@ jobs:
     - name: Test FlareSolverr endpoint
       run: |
         echo "Testing FlareSolverr endpoint..."
-        curl -v http://localhost:8191/v1
-        echo "Testing FlareSolverr health..."
-        docker-compose exec -T flaresolverr wget --spider -q http://localhost:8191/v1
+        curl -X POST \
+          -H "Content-Type: application/json" \
+          -d '{"cmd": "sessions.list"}' \
+          http://localhost:8191/v1
+        
+        echo "Waiting additional time for FlareSolverr to fully initialize..."
+        sleep 30
+
+        echo "Testing FlareSolverr with a test request..."
+        curl -X POST \
+          -H "Content-Type: application/json" \
+          -d '{
+            "cmd": "request.get",
+            "url": "https://www.google.com",
+            "maxTimeout": 60000
+          }' \
+          http://localhost:8191/v1
 
     - name: Run scraper
       run: |
