@@ -29,10 +29,10 @@ services:
     ports:
       - "8191:8191"
     networks:
-      - scraper_network
+      - job_network
 
 networks:
-  scraper_network:
+  job_network:
     driver: bridge
 
 volumes:
