@@ -192,19 +192,53 @@ class IndeedScraperEnhanced:
         raise ConnectionError("Could not connect to FlareSolverr after all attempts")
 
     def launch_stealth_browser(self, playwright, headless=True):
+        self.logger.info(f"Python Path: {sys.executable}")
+        self.logger.info(f"Current Environment: {dict(os.environ)}")
+
+        # Check Chromium paths
+        chromium_paths = [
+            "/usr/bin/chromium",
+            "/usr/bin/google-chrome",
+            "/usr/bin/chromium-browser"
+        ]
+
+        executable_path = None
+        for path in chromium_paths:
+            if os.path.exists(path):
+                executable_path = path
+                break
+
+        self.logger.info(f"Detected Chromium Path: {executable_path}")
+
+
         """Launch a stealth browser with enhanced Chromium stealth settings."""
         browser = playwright.chromium.launch(
             headless=headless,
+            chromium_sandbox=False,  # Disable sandbox in CI
+            env={
+                "DISPLAY": ":99.0"  # Virtual display
+            },
             args=[
-                "--disable-blink-features=AutomationControlled",
                 "--no-sandbox",
                 "--disable-setuid-sandbox",
                 "--disable-dev-shm-usage",
                 "--disable-accelerated-2d-canvas",
-                "--no-first-run",
                 "--disable-gpu",
-                "--window-size=1920,1080"
-            ]
+                "--window-size=1920,1080",
+                "--remote-debugging-port=9222",
+                "--disable-software-rasterizer",
+                "--disable-background-networking",
+                "--disable-default-apps",
+                "--disable-extensions",
+                "--disable-sync",
+                "--disable-translate",
+                "--headless=new",  # Newer headless mode
+                "--hide-scrollbars",
+                "--mute-audio",
+                "--no-first-run",
+                "--disable-browser-side-navigation"
+            ],
+            executable_path="/usr/bin/chromium"
         )
 
         context = browser.new_context(
