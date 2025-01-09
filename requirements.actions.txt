@@ -1,7 +1,20 @@
+# Core dependencies
 playwright==1.40.0
 playwright-stealth==1.0.6
-httpx==0.25.2
-psycopg2-binary==2.9.9
-sqlalchemy==2.0.23
-undetected-chromedriver==3.5.5
 undetected-playwright==0.3.0
+httpx==0.25.2
+
+# Database
+sqlalchemy==2.0.23
+psycopg2-binary==2.9.9
+
+# Environment and Config
+python-dotenv==1.0.0
+
+# Utilities
+requests==2.31.0
+urllib3==2.0.7
+
+# Optional but recommended
+tenacity==8.2.3  # For retries
+python-dateutil==2.8.2  # For date handling
