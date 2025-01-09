@@ -11,19 +11,12 @@ services:
     command:
       - postgres
       - -c listen_addresses=*
-      - -c log_connections=on
-      - -c log_disconnections=on
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     networks:
       - job_network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   flaresolverr:
     image: ghcr.io/flaresolverr/flaresolverr:latest
@@ -34,15 +27,12 @@ services:
       - LOG_LEVEL=debug
       - LOG_HTML=true
       - TZ=Europe/London
+    restart: always
+    networks:
+      - job_network
+    # Remove network_mode: host
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    network_mode: host  # This can help with network resolution
-    restart: always
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8191/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
 networks:
   job_network:
