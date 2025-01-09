@@ -63,49 +63,16 @@ jobs:
           playwright install chromium
           playwright install-deps 
 
-      - name: Start Virtual Display
+      # In your workflow file, add a custom network creation step
+      - name: Create Docker Network
         run: |
-          export DISPLAY=:99
-          Xvfb :99 -ac -screen 0 1920x1080x24 > /dev/null 2>&1 &
-          sleep 3
+          docker network create scraper_network
 
+      # Then modify your FlareSolverr startup
       - name: Start FlareSolverr Service
         run: |
-          docker-compose up -d flaresolverr
-
-          echo "Waiting for FlareSolverr to be ready..."
-
-          # Improved health check with direct port testing
-          MAX_ATTEMPTS=20
-          ATTEMPT=0
-
-          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
-            echo "Checking FlareSolverr connectivity (Attempt $((ATTEMPT+1)))..."
-
-            # Try multiple connection methods
-            if docker exec flaresolverr curl -s http://localhost:8191/health | grep -q "ok"; then
-              echo "✅ FlareSolverr is ready via docker exec"
-              break
-            fi
-
-            if curl -s http://localhost:8191/health | grep -q "ok"; then
-              echo "✅ FlareSolverr is ready via direct curl"
-              break
-            fi
-
-            # Verbose logging of container status
-            docker ps | grep flaresolverr
-            docker logs flaresolverr
-
-            sleep 10
-            ATTEMPT=$((ATTEMPT+1))
-          done
-
-          if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
-            echo "❌ FlareSolverr failed to become ready"
-            docker-compose logs flaresolverr
-            exit 1
-          fi
+          docker-compose up -d --force-recreate flaresolverr
+          docker network connect scraper_network flaresolverr
 
       - name: Check FlareSolverr Service
         run: |
@@ -125,24 +92,17 @@ jobs:
           echo "Docker container logs:"
           docker logs flaresolverr
 
-      - name: Detailed FlareSolverr Debugging
+      - name: Collect FlareSolverr Logs on Failure
+        if: failure()
         run: |
-          echo "FlareSolverr Service Status:"
-          docker ps | grep flaresolverr
-          
-          echo "FlareSolverr Logs:"
-          docker logs flaresolverr
-          
-          echo "Testing FlareSolverr Connectivity:"
-          curl -v -X POST http://localhost:8191/v1 \
-            -H "Content-Type: application/json" \
-            -d '{
-              "cmd": "request.get",
-              "url": "https://www.indeed.com/jobs?q=python+developer",
-              "maxTimeout": 300000,
-              "returnOnlySolution": false,
-              "sessions": true
-            }'
+          docker logs flaresolverr > flaresolverr_logs.txt
+
+      - name: Upload FlareSolverr Logs
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: flaresolverr-logs
+          path: flaresolverr_logs.txt
 
       - name: Network Diagnostics
         run: |
@@ -187,6 +147,7 @@ jobs:
       - name: Run Enhanced Indeed Scraper Test
         env:
           FLARESOLVERR_URL: http://localhost:8191/v1
+          DOCKER_HOST_IP: 172.17.0.1
         run: |
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python -m app.scrapers.scraper_main --test-indeed --category=${{ github.event.inputs.category }}
 

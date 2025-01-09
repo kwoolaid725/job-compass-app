@@ -16,6 +16,7 @@ import math
 import httpx
 import socket
 import netifaces
+import sys
 
 # Enhanced User-Agents list
 user_agents = [
@@ -123,16 +124,36 @@ class IndeedScraperEnhanced:
         payload = {
             "cmd": "request.get",
             "url": url,
-            "maxTimeout": 300000,  # Increased to 5 minutes
+            "maxTimeout": 600000,  # Increased to 10 minutes
             "returnOnlySolution": False,
-            "sessions": True
+            "sessions": True,
+            "session_ttl_minutes": 30,
+            "session_create_timeout_minutes": 10
         }
+
+        # Add network debugging
+        try:
+            import socket
+            flaresolverr_ip = socket.gethostbyname('flaresolverr')
+            self.logger.info(f"FlareSolverr IP: {flaresolverr_ip}")
+        except Exception as e:
+            self.logger.error(f"DNS resolution failed: {e}")
+
+        # Add Docker network inspection
+        try:
+            import subprocess
+            docker_networks = subprocess.check_output(['docker', 'network', 'ls']).decode()
+            self.logger.info(f"Docker networks:\n{docker_networks}")
+        except Exception as e:
+            self.logger.error(f"Docker network inspection failed: {e}")
 
         # Comprehensive connection methods
         connection_methods = [
             'http://localhost:8191/v1',
             'http://127.0.0.1:8191/v1',
-            'http://172.17.0.1:8191/v1',
+            'http://flaresolverr:8191/v1',  # Container name
+            'http://0.0.0.0:8191/v1',  # All interfaces
+            f'http://{os.environ.get("DOCKER_HOST_IP", "172.17.0.1")}:8191/v1'  # Docker bridge
         ]
 
         # Remove duplicate connection methods while preserving order
@@ -144,14 +165,21 @@ class IndeedScraperEnhanced:
                 try:
                     self.logger.info(f"Attempt {attempt + 1}, Trying URL: {connection_url}")
 
-                    import requests
+                    # Test connectivity before making request
+                    try:
+                        import requests
+                        test_response = requests.get(f"{connection_url}/health", timeout=5)
+                        self.logger.info(f"Health check status: {test_response.status_code}")
+                    except Exception as e:
+                        self.logger.warning(f"Health check failed for {connection_url}: {e}")
+                        continue
 
                     # Increased timeout values
                     response = requests.post(
                         connection_url,
                         headers=r_headers,
                         json=payload,
-                        timeout=(45, 300)  # (connect, read) timeouts
+                        timeout=(45, 600)  # (connect, read) timeouts increased
                     )
 
                     # Log full response details
@@ -163,11 +191,22 @@ class IndeedScraperEnhanced:
                         response_data = response.json()
                         self.logger.info(f"Full Response Data: {json.dumps(response_data)}")
 
-                        if response_data.get('solution', {}).get('response'):
+                        solution = response_data.get('solution', {})
+                        if solution.get('response'):
                             self.logger.info(f"Successfully retrieved response from {connection_url}")
-                            return response_data['solution']['response']
 
-                        self.logger.warning(f"Invalid response from {connection_url}: {response_data}")
+                            # Validate the response content
+                            response_content = solution['response']
+                            if isinstance(response_content, str) and len(response_content) > 100:
+                                return response_content
+                            else:
+                                self.logger.warning(f"Response content validation failed: {response_content[:100]}...")
+                                continue
+
+                        if solution.get('error'):
+                            self.logger.error(f"FlareSolverr error: {solution['error']}")
+                        else:
+                            self.logger.warning(f"Invalid response from {connection_url}: {response_data}")
                     else:
                         self.logger.error(f"Non-200 status code from {connection_url}: {response.status_code}")
                         self.logger.error(f"Response Text: {response.text}")
@@ -183,12 +222,14 @@ class IndeedScraperEnhanced:
                     last_error = unexpected_error
 
             # Exponential backoff with jitter
-            import random
-            sleep_time = (30 * (attempt + 1)) + random.uniform(0, 15)
-            self.logger.warning(f"Attempt {attempt + 1} failed. Waiting {sleep_time:.2f} seconds before retry.")
-            time.sleep(sleep_time)
+            if attempt < max_retries - 1:  # Don't sleep on the last attempt
+                sleep_time = (30 * (2 ** attempt)) + random.uniform(0, 15)
+                self.logger.warning(f"Attempt {attempt + 1} failed. Waiting {sleep_time:.2f} seconds before retry.")
+                time.sleep(sleep_time)
 
         self.logger.error("All FlareSolverr connection attempts failed")
+        if last_error:
+            self.logger.error(f"Last error: {str(last_error)}")
         raise ConnectionError("Could not connect to FlareSolverr after all attempts")
 
     def launch_stealth_browser(self, playwright, headless=True):
