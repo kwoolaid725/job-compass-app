@@ -64,23 +64,40 @@ jobs:
       - name: Start FlareSolverr Service
         run: |
           docker-compose up -d flaresolverr
-          
+
           echo "Waiting for FlareSolverr to be ready..."
-          max_attempts=10
-          attempt=0
-          until docker run --network host curlimages/curl -s http://host.docker.internal:8191/health | grep "ok" || [ $attempt -eq $max_attempts ]; do
-            echo "Attempt $((attempt+1)) failed... retrying"
+
+          # Improved health check with direct port testing
+          MAX_ATTEMPTS=20
+          ATTEMPT=0
+
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            echo "Checking FlareSolverr connectivity (Attempt $((ATTEMPT+1)))..."
+
+            # Try multiple connection methods
+            if docker exec flaresolverr curl -s http://localhost:8191/health | grep -q "ok"; then
+              echo "✅ FlareSolverr is ready via docker exec"
+              break
+            fi
+
+            if curl -s http://localhost:8191/health | grep -q "ok"; then
+              echo "✅ FlareSolverr is ready via direct curl"
+              break
+            fi
+
+            # Verbose logging of container status
+            docker ps | grep flaresolverr
+            docker logs flaresolverr
+
             sleep 10
-            attempt=$((attempt+1))
+            ATTEMPT=$((ATTEMPT+1))
           done
-          
-          if [ $attempt -eq $max_attempts ]; then
-            echo "FlareSolverr failed to become ready"
-            docker-compose logs
+
+          if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+            echo "❌ FlareSolverr failed to become ready"
+            docker-compose logs flaresolverr
             exit 1
           fi
-          
-          echo "FlareSolverr is ready"
 
       - name: Debug Network Configuration
         run: |
