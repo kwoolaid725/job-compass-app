@@ -8,13 +8,22 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=sozjavbxj
       - POSTGRES_DB=job_postings
-    command: ["postgres", "-c", "listen_addresses=*"]
+    command:
+      - postgres
+      - -c listen_addresses=*
+      - -c log_connections=on
+      - -c log_disconnections=on
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     networks:
       - job_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   flaresolverr:
     image: ghcr.io/flaresolverr/flaresolverr:latest
@@ -28,6 +37,11 @@ services:
     restart: always
     networks:
       - job_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8191/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 networks:
   job_network:

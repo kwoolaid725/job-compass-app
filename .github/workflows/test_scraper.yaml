@@ -51,8 +51,13 @@ jobs:
       - name: Install Python Dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          pip install -r requirements.actions.txt
-          pip install playwright httpx
+          pip install \
+            playwright \
+            httpx \
+            requests \
+            pyyaml \
+            sqlalchemy \
+            -r requirements.actions.txt
           playwright install chromium
           playwright install-deps
 
@@ -96,10 +101,31 @@ jobs:
 
           echo "Current DNS configuration:"
           cat /etc/resolv.conf
+          
+      - name: Advanced Network Debugging
+        run: |
+          echo "Detailed Network Diagnostics:"
+          
+          echo "--- Docker Network Configuration ---"
+          docker network inspect bridge
+          docker network inspect job_network || true
+          
+          echo "--- Host Network Interfaces ---"
+          ip addr show
+          
+          echo "--- Routing Table ---"
+          ip route
+          
+          echo "--- DNS Configuration ---"
+          cat /etc/resolv.conf
+          
+          echo "--- Testing FlareSolverr Connectivity ---"
+          curl -v http://localhost:8191/v1
+          docker run --network host curlimages/curl -v http://localhost:8191/v1
 
       - name: Run Enhanced Indeed Scraper Test
         env:
-          FLARESOLVERR_URL: http://host.docker.internal:8191/v1
+          FLARESOLVERR_URL: http://localhost:8191/v1
         run: |
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python -m app.scrapers.scraper_main --test-indeed --category=${{ github.event.inputs.category }}
 
