@@ -28,11 +28,13 @@ services:
       - LOG_LEVEL=debug
       - LOG_HTML=true
       - TZ=Europe/London
+      - HOST=flaresolverr
     ports:
       - "8191:8191"
     networks:
-      - scraper_network
-    restart: unless-stopped
+      scraper_network:
+        aliases:
+          - flaresolverr
     healthcheck:
       test: ["CMD", "curl", "-X", "POST", "-H", "Content-Type: application/json", "-d", '{"cmd": "sessions.list"}', "http://localhost:8191/v1"]
       interval: 30s
@@ -51,7 +53,8 @@ services:
       - DB_USER=postgres
       - DB_PASSWORD=${DB_PASSWORD:-sozjavbxj}
       - DB_NAME=job_postings
-      - FLARESOLVERR_URL=http://flaresolverr:8191/v1  # Use container name as hostname
+      - FLARESOLVERR_URL=http://flaresolverr:8191/v1
+      - PYTHONUNBUFFERED=1
     networks:
       - scraper_network
     depends_on:
@@ -63,10 +66,14 @@ services:
       - ./app:/app/app
       - ./data:/app/data
       - ./error_screenshots:/app/error_screenshots
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
 
 networks:
   scraper_network:
     name: scraper_network
+    driver: bridge
 
 volumes:
   pgdata:

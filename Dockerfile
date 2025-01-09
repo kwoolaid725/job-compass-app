@@ -12,6 +12,9 @@ RUN apt-get update && apt-get install -y \
     gcc \
     python3-dev \
     libpq-dev \
+    iputils-ping \
+    dnsutils \
+    net-tools \
     && rm -rf /var/lib/apt/lists/*
 
 # Set environment variables
@@ -42,6 +45,10 @@ COPY ./app ./app
 
 # Create volume mount points
 VOLUME ["/app/data", "/app/error_screenshots", "/app/logs"]
+
+# Add healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://flaresolverr:8191/v1 || exit 1
 
 # Default command
 CMD ["python", "-m", "app.scrapers.scraper_main", "--source", "indeed", "--category", "data_engineer"]
