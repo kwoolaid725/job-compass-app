@@ -21,7 +21,7 @@ ENV PYTHONPATH=/app
 WORKDIR /app
 
 # Copy requirements first (better caching)
-COPY requirements.txt .
+COPY requirements.actions.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.actions.txt

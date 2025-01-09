@@ -1,13 +1,6 @@
-setuptools
-playwright==1.49.1
+playwright==1.40.0
 playwright-stealth==1.0.6
-sqlalchemy
-psycopg2-binary
-python-dotenv
-
-# Additional recommended dependencies for web scraping
-beautifulsoup4
-requests
-fake-useragent
-lxml
-urllib3
+undetected-playwright==0.1.1
+httpx==0.25.2
+psycopg2-binary==2.9.9
+sqlalchemy==2.0.23
