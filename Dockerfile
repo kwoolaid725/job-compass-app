@@ -20,11 +20,15 @@ ENV PYTHONPATH=/app
 # Set up working directory
 WORKDIR /app
 
-# Copy requirements first (better caching)
-COPY requirements.actions.txt .
+# Upgrade pip first
+RUN python -m pip install --upgrade pip
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.actions.txt
+# Copy and install requirements with verbose output
+COPY requirements.actions.txt .
+RUN pip install --no-cache-dir -v -r requirements.actions.txt || \
+    (echo "Failed to install requirements. Contents of requirements.actions.txt:" && \
+     cat requirements.actions.txt && \
+     exit 1)
 
 # Copy the application code
 COPY app/ ./app/
