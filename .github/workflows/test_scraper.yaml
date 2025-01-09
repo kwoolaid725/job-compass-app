@@ -63,16 +63,30 @@ jobs:
           playwright install chromium
           playwright install-deps 
 
-      # In your workflow file, add a custom network creation step
-      - name: Create Docker Network
+      - name: Create Docker Network and Start FlareSolverr
         run: |
-          docker network create scraper_network
-
-      # Then modify your FlareSolverr startup
-      - name: Start FlareSolverr Service
-        run: |
+          docker network create scraper_network || true
           docker-compose up -d --force-recreate flaresolverr
-          docker network connect scraper_network flaresolverr
+          
+          # Wait for FlareSolverr to be ready
+          echo "Waiting for FlareSolverr to be ready..."
+          MAX_ATTEMPTS=20
+          ATTEMPT=0
+          
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            echo "Checking FlareSolverr connectivity (Attempt $((ATTEMPT+1)))..."
+            
+            if docker exec flaresolverr curl -s http://localhost:8191/health | grep -q "ok"; then
+              echo "✅ FlareSolverr is ready"
+              break
+            fi
+            
+            docker ps | grep flaresolverr
+            docker logs flaresolverr
+            
+            sleep 10
+            ATTEMPT=$((ATTEMPT+1))
+          done
 
       - name: Check FlareSolverr Service
         run: |

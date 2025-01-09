@@ -30,10 +30,9 @@ services:
       - "8191:8191"
     networks:
       - scraper_network
-    restart: unless-stopped
 
 networks:
-  job_network:
+  scraper_network:
     driver: bridge
 
 volumes:
