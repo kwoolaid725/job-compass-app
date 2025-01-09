@@ -24,14 +24,12 @@ services:
     environment:
       - LOG_LEVEL=debug
       - LOG_HTML=true
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8191/v1" ]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-    ports:
-      - "8191:8191"
-    network_mode: "host"
+      - CAPTCHA_SOLVER=none
+      - TZ=UTC
+    # Remove the ports mapping when using host network mode
+    network_mode: host  # This will use host network directly
+    # ports:  # Remove this section when using network_mode: host
+    #   - "8191:8191"
 
 networks:
   job_network:
