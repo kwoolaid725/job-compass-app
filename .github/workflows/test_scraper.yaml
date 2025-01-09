@@ -99,6 +99,24 @@ jobs:
             exit 1
           fi
 
+      - name: Check FlareSolverr Service
+        run: |
+          echo "Checking FlareSolverr service..."
+          
+          # Try different connection methods
+          echo "Trying localhost..."
+          curl -v -X POST http://localhost:8191/v1 \
+            -H "Content-Type: application/json" \
+            -d '{"cmd":"request.get","url":"https://example.com","maxTimeout":60000}'
+          
+          echo "Trying 127.0.0.1..."
+          curl -v -X POST http://127.0.0.1:8191/v1 \
+            -H "Content-Type: application/json" \
+            -d '{"cmd":"request.get","url":"https://example.com","maxTimeout":60000}'
+          
+          echo "Docker container logs:"
+          docker logs flaresolverr
+
       - name: Network Diagnostics
         run: |
           echo "Hostname resolution:"

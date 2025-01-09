@@ -118,7 +118,7 @@ class IndeedScraperEnhanced:
         return False
 
     def send_flaresolverr_request(self, url: str, max_retries: int = 3):
-        """Send a GET request with FlareSolverr using httpx with extensive error handling"""
+        """Send a GET request with FlareSolverr using requests with extensive error handling"""
         r_headers = {"Content-Type": "application/json"}
         payload = {
             "cmd": "request.get",
@@ -128,100 +128,57 @@ class IndeedScraperEnhanced:
             "sessions": True
         }
 
-        # Add more connection methods based on network configuration
+        # Comprehensive connection methods
         connection_methods = [
-            self.flaresolverr_url,
             'http://localhost:8191/v1',
             'http://127.0.0.1:8191/v1',
-            'http://flaresolverr:8191/v1'
+            'http://host.docker.internal:8191/v1',
+            'http://172.17.0.1:8191/v1',  # Default Docker bridge network gateway
         ]
 
-        # Try to resolve additional network IPs
-        try:
-
-
-            # Attempt to resolve FlareSolverr IP
-            try:
-                flaresolverr_ip = socket.gethostbyname('flaresolverr')
-                connection_methods.append(f'http://{flaresolverr_ip}:8191/v1')
-                self.logger.info(f"Resolved flaresolverr IP: {flaresolverr_ip}")
-            except Exception as dns_error:
-                self.logger.error(f"DNS resolution error for flaresolverr: {dns_error}")
-
-            # Add IPs from network interfaces
-            for interface in netifaces.interfaces():
-                try:
-                    addrs = netifaces.ifaddresses(interface)
-                    if netifaces.AF_INET in addrs:
-                        ip = addrs[netifaces.AF_INET][0]['addr']
-                        connection_methods.append(f'http://{ip}:8191/v1')
-                except Exception as e:
-                    self.logger.error(f"Error getting IP for interface {interface}: {e}")
-
-        except ImportError:
-            self.logger.warning("netifaces module not available for additional IP resolution")
-        except Exception as general_error:
-            self.logger.error(f"Unexpected error in IP resolution: {general_error}")
-
-        # Remove duplicates while preserving order
+        # Remove duplicate connection methods while preserving order
         connection_methods = list(dict.fromkeys(connection_methods))
 
         for attempt in range(max_retries):
             last_error = None
             for connection_url in connection_methods:
                 try:
-                    # Extensive logging
                     self.logger.info(f"Attempt {attempt + 1}, Trying URL: {connection_url}")
+
+                    # Use requests for more straightforward connection
+                    import requests
+
+                    # Verbose logging of payload and URL
+                    self.logger.info(f"Connection URL: {connection_url}")
                     self.logger.info(f"Payload: {json.dumps(payload)}")
 
-                    # Use more flexible timeout and transport settings
-                    with httpx.Client(
-                            timeout=httpx.Timeout(
-                                connect=45.0,  # Increased connection timeout
-                                read=240.0,  # Increased read timeout
-                                write=45.0,  # Increased write timeout
-                                pool=90.0  # Increased pool timeout
-                            ),
-                            transport=httpx.HTTPTransport(
-                                retries=3,
-                                verify=False  # Disable SSL verification if needed
-                            )
-                    ) as client:
-                        # Network diagnostics (optional, can be commented out in production)
-                        try:
-                            import subprocess
-                            network_check = subprocess.run(
-                                ['ip', 'addr'],
-                                capture_output=True,
-                                text=True,
-                                timeout=10
-                            )
-                            self.logger.debug(f"Network configuration:\n{network_check.stdout}")
-                        except Exception as network_diag_error:
-                            self.logger.error(f"Network diagnostics error: {network_diag_error}")
+                    # Explicitly use POST method
+                    response = requests.post(
+                        connection_url,
+                        headers=r_headers,
+                        json=payload,
+                        timeout=(30, 180)  # (connect, read) timeouts
+                    )
 
-                        # Make the request
-                        response = client.post(
-                            url=connection_url,
-                            headers=r_headers,
-                            json=payload,
-                            follow_redirects=True
-                        )
+                    # Log full response details
+                    self.logger.info(f"Response Status Code: {response.status_code}")
+                    self.logger.info(f"Response Headers: {response.headers}")
 
-                        # Detailed logging
-                        self.logger.info(f"Response status from {connection_url}: {response.status_code}")
-
-                        response.raise_for_status()
+                    # Check response
+                    if response.status_code == 200:
                         response_data = response.json()
+                        self.logger.info(f"Full Response Data: {json.dumps(response_data)}")
 
-                        # Validate response
                         if response_data.get('solution', {}).get('response'):
                             self.logger.info(f"Successfully retrieved response from {connection_url}")
                             return response_data['solution']['response']
 
                         self.logger.warning(f"Invalid response from {connection_url}: {response_data}")
+                    else:
+                        self.logger.error(f"Non-200 status code from {connection_url}: {response.status_code}")
+                        self.logger.error(f"Response Text: {response.text}")
 
-                except httpx.RequestError as conn_error:
+                except requests.RequestException as conn_error:
                     self.logger.error(f"Connection error with {connection_url}: {conn_error}")
                     last_error = conn_error
                 except Exception as unexpected_error:
@@ -229,10 +186,9 @@ class IndeedScraperEnhanced:
                     last_error = unexpected_error
 
             # Exponential backoff
-            if last_error:
-                sleep_time = 30 * (attempt + 1)
-                self.logger.warning(f"Attempt {attempt + 1} failed. Waiting {sleep_time} seconds before retry.")
-                time.sleep(sleep_time)
+            sleep_time = 30 * (attempt + 1)
+            self.logger.warning(f"Attempt {attempt + 1} failed. Waiting {sleep_time} seconds before retry.")
+            time.sleep(sleep_time)
 
         self.logger.error("All FlareSolverr connection attempts failed")
         raise ConnectionError("Could not connect to FlareSolverr after all attempts")
