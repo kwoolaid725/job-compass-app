@@ -44,9 +44,10 @@ class IndeedScraperEnhanced:
         # Retrieve FlareSolverr URL from environment or use provided/default value
         self.flaresolverr_url = flaresolverr_url or os.environ.get(
             'FLARESOLVERR_URL',
-            'http://localhost:8191/v1'
+            'http://flaresolverr:8191/v1'  # Use service name in Docker network
         )
-        # Keep other existing initialization parameters
+
+        # Rest of the initialization remains the same
         self.user_input = user_input
         self.max_pages = max_pages
         self.job_source = job_source
@@ -115,7 +116,7 @@ class IndeedScraperEnhanced:
         return False
 
     def send_flaresolverr_request(self, url: str, max_retries: int = 3):
-        """Send a GET request with FlareSolverr using httpx with Cloudflare block detection"""
+        """Send a GET request with FlareSolverr using httpx with extensive error handling"""
         r_headers = {"Content-Type": "application/json"}
         payload = {
             "cmd": "request.get",
@@ -129,7 +130,7 @@ class IndeedScraperEnhanced:
             try:
                 # Extensive logging
                 self.logger.info(f"FlareSolverr URL: {self.flaresolverr_url}")
-                self.logger.info(f"Attempting to fetch: {url}")
+                self.logger.info(f"Payload: {json.dumps(payload)}")
 
                 # Try multiple connection methods based on the configured URL
                 connection_methods = [
@@ -142,11 +143,13 @@ class IndeedScraperEnhanced:
                 last_error = None
                 for connection_url in connection_methods:
                     try:
+                        # Use explicit timeout parameters
                         with httpx.Client(
                                 timeout=httpx.Timeout(
-                                    connect=30.0,
-                                    read=180.0,
-                                    write=30.0
+                                    connect=30.0,  # Connection timeout
+                                    read=180.0,  # Read timeout
+                                    write=30.0,  # Write timeout
+                                    pool=60.0  # Pool timeout
                                 )
                         ) as client:
                             response = client.post(
@@ -165,21 +168,8 @@ class IndeedScraperEnhanced:
                             response_data = response.json()
 
                             # Validate response
-                            solution = response_data.get('solution', {})
-                            if solution.get('response'):
-                                # Additional Cloudflare block check in the solution
-                                response_html = solution.get('response', '').lower()
-                                cloudflare_html_indicators = [
-                                    'cloudflare' in response_html,
-                                    'attention required!' in response_html,
-                                    'just a moment...' in response_html
-                                ]
-
-                                if any(cloudflare_html_indicators):
-                                    self.logger.warning("⚠️ Cloudflare block detected in solution response")
-                                    continue
-
-                                return solution['response']
+                            if response_data.get('solution', {}).get('response'):
+                                return response_data['solution']['response']
 
                             self.logger.warning(f"Invalid response from {connection_url}: {response_data}")
 
