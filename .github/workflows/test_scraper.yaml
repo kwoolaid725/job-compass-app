@@ -70,6 +70,33 @@ jobs:
           }' \
           http://localhost:8191/v1
 
+    - name: Check network and services
+      run: |
+        echo "Creating network if it doesn't exist..."
+        docker network create scraper_network || true
+        
+        echo "Starting services..."
+        docker-compose up -d db flaresolverr
+        
+        echo "Waiting for services to initialize (30s)..."
+        sleep 30
+        
+        echo "Checking network..."
+        docker network ls
+        docker network inspect scraper_network
+        
+        echo "Checking container status..."
+        docker-compose ps
+        
+        echo "Testing network connectivity from scraper to FlareSolverr..."
+        docker-compose run --rm scraper curl -X POST \
+          -H "Content-Type: application/json" \
+          -d '{"cmd": "sessions.list"}' \
+          http://flaresolverr:8191/v1
+        
+        echo "Checking FlareSolverr logs..."
+        docker-compose logs flaresolverr
+
     - name: Run scraper
       run: |
         echo "Starting scraper..."

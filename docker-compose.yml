@@ -13,6 +13,8 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    networks:
+      - scraper_network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -28,6 +30,8 @@ services:
       - TZ=Europe/London
     ports:
       - "8191:8191"
+    networks:
+      - scraper_network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-X", "POST", "-H", "Content-Type: application/json", "-d", '{"cmd": "sessions.list"}', "http://localhost:8191/v1"]
@@ -47,8 +51,9 @@ services:
       - DB_USER=postgres
       - DB_PASSWORD=${DB_PASSWORD:-sozjavbxj}
       - DB_NAME=job_postings
-      - FLARESOLVERR_URL=http://flaresolverr:8191/v1
-    command: ["python", "-m", "app.scrapers.scraper_main", "--source", "indeed", "--category", "data_engineer"]
+      - FLARESOLVERR_URL=http://flaresolverr:8191/v1  # Use container name as hostname
+    networks:
+      - scraper_network
     depends_on:
       db:
         condition: service_healthy
@@ -58,6 +63,10 @@ services:
       - ./app:/app/app
       - ./data:/app/data
       - ./error_screenshots:/app/error_screenshots
+
+networks:
+  scraper_network:
+    name: scraper_network
 
 volumes:
   pgdata:
