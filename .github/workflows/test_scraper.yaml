@@ -19,7 +19,7 @@ jobs:
     env:
       LINKEDIN_EMAIL: ${{ secrets.LINKEDIN_EMAIL }}
       LINKEDIN_PASSWORD: ${{ secrets.LINKEDIN_PASSWORD }}
-      FLARESOLVERR_URL: http://host.docker.internal:8191/v1  # Host connection for GitHub runners
+      FLARESOLVERR_URL: http://localhost:8191/v1
 
     steps:
       - name: Checkout Repository
