@@ -13,10 +13,6 @@ import re
 from app.crud.job_queries import find_indeed_duplicates_batch
 import logging
 import math
-import httpx
-import socket
-import netifaces
-import sys
 
 # Enhanced User-Agents list
 user_agents = [
@@ -36,21 +32,12 @@ class UserInput:
 
 
 class IndeedScraperEnhanced:
-    def __init__(self, user_input: UserInput,
-                 flaresolverr_url: Optional[str] = None,
-                 max_pages: int = 10,
+    def __init__(self, user_input: UserInput, max_pages: int = 10,
                  existing_urls: Optional[set] = None,
                  job_source: Optional[JobSource] = None,
                  job_category: Optional[JobCategory] = None,
                  db_manager=None,
                  logger=None):
-        # Retrieve FlareSolverr URL from environment or use provided/default value
-        self.flaresolverr_url = flaresolverr_url or os.environ.get(
-            'FLARESOLVERR_URL',
-            'http://flaresolverr:8191/v1'  # Use service name in Docker network
-        )
-
-        # Rest of the initialization remains the same
         self.user_input = user_input
         self.max_pages = max_pages
         self.job_source = job_source
@@ -59,187 +46,20 @@ class IndeedScraperEnhanced:
         self.db_manager = db_manager
         self.logger = logger or logging.getLogger(__name__)
 
-    def is_cloudflare_blocked(self, response):
-        """
-        Detect Cloudflare blocking attempts
-
-        Args:
-            response: httpx response object
-
-        Returns:
-            bool: True if Cloudflare blocking is detected, False otherwise
-        """
-        # Check response headers
-        headers = response.headers
-        body_text = response.text.lower()
-
-        cloudflare_indicators = [
-            # Header-based checks
-            'cf-ray' in headers,
-            headers.get('server', '').lower() == 'cloudflare',
-            any('__cfuid' in cookie for cookie in headers.get('set-cookie', '')),
-
-            # Body text checks
-            'attention required!' in body_text,
-            'cloudflare ray id:' in body_text,
-            'ddos protection by cloudflare' in body_text,
-            'challenge-platform/h/g/challenge-platform' in body_text,
-            'cloudflare error 500s box' in body_text,
-            'just a moment...' in body_text,
-            'challenge is required' in body_text
-        ]
-
-        # If any indicator is True, log details
-        if any(cloudflare_indicators):
-            self.logger.warning("🚫 Cloudflare blocking detected!")
-
-            # Detailed logging
-            if 'cf-ray' in headers:
-                self.logger.warning(f"CF-Ray Header: {headers.get('cf-ray')}")
-
-            if headers.get('server', '').lower() == 'cloudflare':
-                self.logger.warning("Cloudflare server header detected")
-
-            # Screenshot mechanism (if possible in this context)
-            try:
-                os.makedirs('cloudflare_blocks', exist_ok=True)
-                timestamp = time.strftime("%Y%m%d_%H%M%S")
-                block_file = f'cloudflare_blocks/cloudflare_block_{timestamp}.txt'
-                with open(block_file, 'w', encoding='utf-8') as f:
-                    f.write("Cloudflare Block Detected\n\n")
-                    f.write("Headers:\n")
-                    f.write(json.dumps(dict(headers), indent=2))
-                    f.write("\n\nBody:\n")
-                    f.write(body_text[:2000])  # Limit body to first 2000 characters
-            except Exception as e:
-                self.logger.error(f"Error logging Cloudflare block: {e}")
-
-            return True
-
-        return False
-
-    def send_flaresolverr_request(self, url: str, max_retries: int = 3):
-        """Send a request to FlareSolverr with enhanced timeout and error handling"""
-        r_headers = {"Content-Type": "application/json"}
-        payload = {
-            "cmd": "request.get",
-            "url": url,
-            "maxTimeout": 300000,
-            "returnOnlySolution": False,
-            "sessions": True
-        }
-
-        # Different connection methods based on environment
-        if os.environ.get('GITHUB_ACTIONS'):
-            connection_methods = [
-                'http://localhost:8191/v1',
-                'http://127.0.0.1:8191/v1'
-            ]
-            self.logger.info("Running in GitHub Actions environment")
-        else:
-            connection_methods = [
-                'http://flaresolverr:8191/v1',
-                'http://localhost:8191/v1',
-                'http://127.0.0.1:8191/v1',
-                'http://172.17.0.1:8191/v1',
-            ]
-            self.logger.info("Running in local environment")
-
-        # Remove duplicate connection methods while preserving order
-        connection_methods = list(dict.fromkeys(connection_methods))
-
-        for attempt in range(max_retries):
-            for connection_url in connection_methods:
-                try:
-                    self.logger.info(f"Attempt {attempt + 1}, Trying URL: {connection_url}")
-
-                    # Test connectivity using health endpoint (remove /v1 for health check)
-                    try:
-                        import requests
-                        base_url = connection_url.replace('/v1', '')
-                        health_url = f"{base_url}/health"
-                        self.logger.info(f"Checking health at: {health_url}")
-                        test_response = requests.get(health_url, timeout=5)
-                        self.logger.info(f"Health check status: {test_response.status_code}")
-                        if test_response.status_code != 200:
-                            continue
-                    except Exception as e:
-                        self.logger.warning(f"Health check failed for {health_url}: {e}")
-                        continue
-
-                    # Main request (use full connection_url which already includes /v1)
-                    response = requests.post(
-                        connection_url,
-                        headers=r_headers,
-                        json=payload,
-                        timeout=(45, 600)
-                    )
-
-                    if response.status_code == 200:
-                        response_data = response.json()
-                        if response_data.get('solution', {}).get('response'):
-                            self.logger.info(f"Successfully retrieved response from {connection_url}")
-                            return response_data['solution']['response']
-
-                except Exception as e:
-                    self.logger.error(f"Error with {connection_url}: {e}")
-                    continue
-
-            # Exponential backoff
-            sleep_time = (2 ** attempt) + random.uniform(0, 1)
-            self.logger.warning(f"Attempt {attempt + 1} failed. Waiting {sleep_time:.2f} seconds")
-            time.sleep(sleep_time)
-
-        raise ConnectionError("Could not connect to FlareSolverr after all attempts")
-
     def launch_stealth_browser(self, playwright, headless=True):
-        self.logger.info(f"Python Path: {sys.executable}")
-        self.logger.info(f"Current Environment: {dict(os.environ)}")
-
-        # Check Chromium paths
-        chromium_paths = [
-            "/usr/bin/chromium",
-            "/usr/bin/google-chrome",
-            "/usr/bin/chromium-browser"
-        ]
-
-        executable_path = None
-        for path in chromium_paths:
-            if os.path.exists(path):
-                executable_path = path
-                break
-
-        self.logger.info(f"Detected Chromium Path: {executable_path}")
-
-
         """Launch a stealth browser with enhanced Chromium stealth settings."""
         browser = playwright.chromium.launch(
             headless=headless,
-            chromium_sandbox=False,  # Disable sandbox in CI
-            env={
-                "DISPLAY": ":99.0"  # Virtual display
-            },
             args=[
+                "--disable-blink-features=AutomationControlled",
                 "--no-sandbox",
                 "--disable-setuid-sandbox",
                 "--disable-dev-shm-usage",
                 "--disable-accelerated-2d-canvas",
-                "--disable-gpu",
-                "--window-size=1920,1080",
-                "--remote-debugging-port=9222",
-                "--disable-software-rasterizer",
-                "--disable-background-networking",
-                "--disable-default-apps",
-                "--disable-extensions",
-                "--disable-sync",
-                "--disable-translate",
-                "--headless=new",  # Newer headless mode
-                "--hide-scrollbars",
-                "--mute-audio",
                 "--no-first-run",
-                "--disable-browser-side-navigation"
-            ],
-            executable_path="/usr/bin/chromium"
+                "--disable-gpu",
+                "--window-size=1920,1080"
+            ]
         )
 
         context = browser.new_context(
@@ -381,40 +201,38 @@ class IndeedScraperEnhanced:
             return False
 
     def run(self):
+        """
+        Enhanced scraping run method with headless mode
+        """
         with sync_playwright() as p:
             os.makedirs('screenshots', exist_ok=True)
             for start in range(0, self.max_pages * 10, 10):
-                browser, page = self.launch_stealth_browser(p, headless=False)
+                # Use headless mode directly
+                browser, page = self.launch_stealth_browser(p, headless=False)  # Set to False to see verification
                 page_url = f"{self.user_input.url}&start={start}"
                 self.logger.info(f"🌐 Navigating to page {start // 10 + 1}")
 
                 try:
-                    # Try FlareSolverr first with extended timeout
-                    flaresolverr_content = self.send_flaresolverr_request(page_url)
-
-                    if not flaresolverr_content:
-                        self.logger.warning("FlareSolverr failed, falling back to direct navigation")
-                        page.goto(page_url, timeout=60000)
-                    else:
-                        page.set_content(flaresolverr_content)
-                    # Set the content from FlareSolverr instead of navigating
-
+                    # Navigate to page and wait for load
+                    page.goto(page_url, timeout=60000)
                     page.wait_for_load_state('networkidle', timeout=10000)
 
                     # Take initial screenshot
                     page.screenshot(path='screenshots/1_initial_page.png')
                     self.logger.info("📸 Initial page screenshot captured")
 
-                    # Handle verification if needed
-                    time.sleep(2)
+                    # Handle verification immediately
+                    time.sleep(2)  # Brief pause to let any verification popup appear
+
                     verification_result = self.handle_verification(page)
                     if verification_result:
                         self.logger.info("✅ Verification challenge handled")
+                        # Take post-verification screenshot
                         page.screenshot(path='screenshots/5_post_verification.png')
                     else:
                         self.logger.info("ℹ️ No verification needed or verification failed")
 
-                    # Extract job links
+                    # Rest of your existing logic
                     job_links = self.extract_job_links(page)
 
                     if not job_links:
@@ -437,6 +255,7 @@ class IndeedScraperEnhanced:
 
                 except Exception as e:
                     self.logger.error(f"❌ Error on page {start}: {e}")
+                    # Take error screenshot
                     page.screenshot(path='screenshots/error_state.png')
                 finally:
                     browser.close()

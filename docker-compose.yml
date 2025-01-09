@@ -6,34 +6,57 @@ services:
     container_name: job_postings
     environment:
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=sozjavbxj
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-sozjavbxj}
       - POSTGRES_DB=job_postings
-    command:
-      - postgres
-      - -c listen_addresses=*
+    command: ["postgres", "-c", "listen_addresses=*"]
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-    networks:
-      - job_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   flaresolverr:
     image: ghcr.io/flaresolverr/flaresolverr:latest
     container_name: flaresolverr
     environment:
-      - LOG_LEVEL=debug
-      - LOG_HTML=true
-      - CAPTCHA_SOLVER=none
-      - TZ=UTC
-    # Remove the ports mapping when using host network mode
-    network_mode: host  # This will use host network directly
-    # ports:  # Remove this section when using network_mode: host
-    #   - "8191:8191"
+      - LOG_LEVEL=info
+      - LOG_HTML=false
+      - TZ=Europe/London
+    ports:
+      - "8191:8191"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8191/v1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-networks:
-  job_network:
-    driver: bridge
+  scraper:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: job_scraper
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=${DB_PASSWORD:-sozjavbxj}
+      - DB_NAME=job_postings
+      - FLARESOLVERR_URL=http://flaresolverr:8191/v1
+    command: ["python", "-m", "app.scrapers.scraper_main", "--source", "indeed", "--category", "data_engineer"]
+    depends_on:
+      db:
+        condition: service_healthy
+      flaresolverr:
+        condition: service_healthy
+    volumes:
+      - ./app:/app/app
+      - ./data:/app/data
+      - ./error_screenshots:/app/error_screenshots
 
 volumes:
   pgdata:

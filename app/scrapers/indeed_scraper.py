@@ -14,6 +14,7 @@ from app.crud.job_queries import find_indeed_duplicates_batch
 import logging
 from undetected_playwright import Malenia
 import httpx
+import math
 
 # Enhanced User-Agents list
 user_agents = [
@@ -56,46 +57,56 @@ class IndeedScraper:
         match = re.search(r'clk\?jk=([^&]+)', url)
         return match.group(1) if match else None
 
-    def send_flaresolverr_request(self, url: str):
-        """Send a GET request with FlareSolverr using httpx"""
-        # Basic header content type header
-        r_headers = {"Content-Type": "application/json"}
-        # Request payload
-        payload = {
-            "cmd": "request.get",
-            "url": url,
-            "maxTimeout": 60000
-        }
+    def send_flaresolverr_request(self, url: str, max_retries=3):
+        """Send FlareSolverr request with retries"""
+        for attempt in range(max_retries):
+            try:
+                # Add delay between retries
+                if attempt > 0:
+                    time.sleep(random.uniform(10, 20))
 
-        try:
-            # Send the POST request using httpx
-            with httpx.Client(timeout=60.0) as client:
-                response = client.post(url=self.flaresolverr_url, headers=r_headers, json=payload)
+                self.logger.info(f"FlareSolverr attempt {attempt + 1}/{max_retries} for URL: {url}")
 
-                # Check if request was successful
-                response.raise_for_status()
+                r_headers = {"Content-Type": "application/json"}
+                payload = {
+                    "cmd": "request.get",
+                    "url": url,
+                    "maxTimeout": 180000
+                }
 
-                # Parse the JSON response
-                response_data = response.json()
+                with httpx.Client(timeout=180.0) as client:
+                    response = client.post(
+                        url=self.flaresolverr_url,
+                        headers=r_headers,
+                        json=payload
+                    )
 
-                # Check if solution exists in the response
-                if response_data.get('solution', {}).get('response'):
-                    return response_data['solution']['response']
+                    # Check if request was successful
+                    response.raise_for_status()
 
-                self.logger.error(f"FlareSolverr failed to bypass URL: {url}")
-                return None
+                    # Parse the JSON response
+                    response_data = response.json()
 
-        except httpx.RequestError as e:
-            self.logger.error(f"Error sending request to FlareSolverr: {e}")
-            return None
-        except json.JSONDecodeError as e:
-            self.logger.error(f"Error parsing FlareSolverr response: {e}")
-            return None
+                    # Check if solution exists in the response
+                    if response_data.get('solution', {}).get('response'):
+                        return response_data['solution']['response']
+
+                    self.logger.warning(f"FlareSolverr returned no solution on attempt {attempt + 1}")
+
+            except httpx.RequestError as e:
+                self.logger.error(f"FlareSolverr request error on attempt {attempt + 1}: {e}")
+            except json.JSONDecodeError as e:
+                self.logger.error(f"FlareSolverr JSON parse error on attempt {attempt + 1}: {e}")
+            except Exception as e:
+                self.logger.error(f"FlareSolverr unexpected error on attempt {attempt + 1}: {e}")
+
+        self.logger.error(f"❌ FlareSolverr failed after {max_retries} attempts")
+        return None
 
     def run(self):
-        """Modified run method to use FlareSolverr"""
+        """Modified run method to use FlareSolverr with improved content loading"""
         with sync_playwright() as p:
-            for start in range(40, self.max_pages * 10, 10):
+            for start in range(20, self.max_pages * 10, 10):
                 # Use FlareSolverr to get the page content
                 page_url = f"{self.user_input.url}&start={start}"
                 flaresolverr_content = self.send_flaresolverr_request(page_url)
@@ -107,27 +118,56 @@ class IndeedScraper:
                 browser, page = self.launch_stealth_browser(p)
 
                 try:
-                    # Instead of page.goto(), set the content directly
-                    page.set_content(flaresolverr_content)
-                    time.sleep(random.uniform(1, 3))
+                    # Set content with increased timeout and handle it in chunks if necessary
+                    try:
+                        # First try with default timeout
+                        page.set_content(flaresolverr_content, timeout=60000)  # Increased to 60 seconds
+                    except Exception as content_error:
+                        self.logger.warning(
+                            f"Initial content setting failed, trying alternative approach: {content_error}")
+                        # Alternative approach: Load a blank page first
+                        page.goto('about:blank')
+                        time.sleep(2)
+                        # Try setting content again with even longer timeout
+                        page.set_content(flaresolverr_content, timeout=120000)  # 120 seconds
 
-                    # Rest of the existing processing logic remains the same
+                    # Wait for the page to be fully loaded
+                    page.wait_for_load_state('networkidle', timeout=30000)
+                    time.sleep(random.uniform(2, 4))
+
+                    # Rest of the existing processing logic
                     job_links = self.extract_job_links(page)
 
                     if not job_links:
                         self.logger.error("❌ No job links found")
                         browser.close()
+                        time.sleep(random.uniform(5, 10))  # Added longer delay before breaking
                         break
 
-                    # Process job links as before
+                    # Get duplicates for the current batch of job links
+                    duplicate_keys = find_indeed_duplicates_batch(self.db_manager.Session(), job_links)
+
                     for job_url in job_links:
+                        job_key = self.get_indeed_job_key(job_url)
+                        if job_key in duplicate_keys:
+                            self.logger.info(f"⏭️ Skipping duplicate job: {job_url}")
+                            continue
+
+                        # Process non-duplicate jobs
                         self.process_job(job_url, browser)
+                        time.sleep(random.uniform(1, 3))  # Added delay between job processing
 
                 except Exception as e:
-                    self.logger.error(f"❌ Error on page {start}: {e}")
+                    self.logger.error(f"❌ Error on page {start}: {str(e)}")
+                    # Take a screenshot of the error state if possible
+                    try:
+                        os.makedirs('error_screenshots', exist_ok=True)
+                        page.screenshot(path=f'error_screenshots/error_page_{start}.png')
+                    except Exception as screenshot_error:
+                        self.logger.error(f"Failed to take error screenshot: {screenshot_error}")
                 finally:
                     browser.close()
-                    time.sleep(random.uniform(2, 5))
+                    time.sleep(random.uniform(3, 7))  # Increased delay between pages
 
 
     def load_existing_job_urls(self) -> set:
@@ -309,108 +349,142 @@ class IndeedScraper:
         )
 
         Malenia.apply_stealth(context)
+
         page = context.new_page()
+        # stealth_sync(page)
 
 
         return browser, page
 
     def extract_job_links(self, page):
-        """Extract all job URLs from the main listing page."""
+        """Extract all job URLs from the main listing page with optimized performance."""
         job_links = []
         try:
-            # page.wait_for_selector('a.jcs-JobTitle.css-1baag51.eu4oa1w0', timeout=15000)
-            page.wait_for_selector('a.jcs-JobTitle.css-1baag51.eu4oa1w0', timeout=15000000)
-            self.simulate_human_behavior(page)  # Add random behavior before extraction
-            anchors = page.query_selector_all('a.jcs-JobTitle.css-1baag51.eu4oa1w0')
-            for i, anchor in enumerate(anchors):
-                href = anchor.get_attribute('href')
+            # Reduce timeout to reasonable 30 seconds
+            page.wait_for_selector('a.jcs-JobTitle.css-1baag51.eu4oa1w0', timeout=30000)
+
+            # Use evaluate to extract links directly in the page context
+            # This is faster than querying each element individually
+            hrefs = page.evaluate("""
+                () => Array.from(
+                    document.querySelectorAll('a.jcs-JobTitle.css-1baag51.eu4oa1w0')
+                ).map(a => a.href)
+            """)
+
+            # Process the extracted URLs
+            for i, href in enumerate(hrefs):
                 if href:
-                    full_url = urljoin('https://www.indeed.com', href)
-                    job_links.append(full_url)
-                    self.logger.info(f"\U0001F517 Job Link {i + 1}: {full_url}")
-                if i % 5 == 0:  # Add small delays during extraction
-                    time.sleep(random.uniform(0.5, 1))
+                    job_links.append(href)  # URLs are already absolute from evaluate()
+                    self.logger.info(f"\U0001F517 Job Link {i + 1}: {href}")
+
+            self.logger.info(f"✅ Extracted {len(job_links)} job links")
+
         except Exception as e:
-            print(f"❌ Error extracting job links: {e}")
-        self.logger.info(f"✅ Extracted {len(job_links)} job links")
+            self.logger.error(f"❌ Error extracting job links: {e}")
+            # Take error screenshot for debugging
+            try:
+                os.makedirs('error_screenshots', exist_ok=True)
+                page.screenshot(path='error_screenshots/link_extraction_error.png')
+            except Exception as screenshot_error:
+                self.logger.error(f"Failed to take error screenshot: {screenshot_error}")
+
         return job_links
 
-    def process_batch(self, batch, browser):
-        """Process a batch of job links with random delays."""
-        for job_url in batch:
-            if job_url in self.existing_urls:
-                print(f"⏭️ Skipping already scraped job: {job_url}")
-                continue
-
-            time.sleep(random.uniform(1, 3))
-
-            retries = 3
-            while retries > 0:
-                try:
-                    print(f"\U0001F517 Processing job URL: {job_url} (Retries left: {retries})")
-                    success = self.process_job_link(browser, job_url)
-                    if success:
-                        print(f"✅ Extracted job details from {job_url}")
-                        self.existing_urls.add(job_url)
-                        time.sleep(random.uniform(2, 5))
-                        break
-                    else:
-                        print(f"⚠️ Failed to extract job details from {job_url}")
-                except Exception as e:
-                    print(f"❌ Error extracting job details from {job_url}: {e}")
-                retries -= 1
-                time.sleep(random.uniform(2, 5))
-                if retries == 0:
-                    print(f"❌ Gave up on job URL after 3 retries: {job_url}")
-
-    def get_job_details(self, browser, job_url):
-        try:
-            context = browser.new_context(
-                user_agent=random.choice(user_agents),
-                viewport={'width': 1920, 'height': 1080},
-                screen={'width': 1920, 'height': 1080}
-            )
-            Malenia.apply_stealth(context)  # Use Malenia instead of stealth_sync
-            page = context.new_page()
-            page.goto(job_url, timeout=30000)
-            self.simulate_human_behavior(page)
-            page.wait_for_load_state('networkidle', timeout=15000)
-            time.sleep(random.uniform(2, 4))
-
-            window_data = page.evaluate("() => window._initialData")
-
-            salary_info = None
+    def get_job_details(self, browser, job_url, max_retries=3):
+        """Get job details with retry mechanism and improved error handling"""
+        for attempt in range(max_retries):
             try:
-                salary_selectors = [
-                    '.js-match-insights-provider-4pmm6z.e1wnkr790',
-                    '[data-testid="salaryInfo"]',
-                    '.salary-snippet-container',
-                    '.salaryText',
-                    '.jobsearch-JobMetadataHeader-item'
-                ]
+                # Add delay between retries
+                if attempt > 0:
+                    time.sleep(random.uniform(5, 10))
 
-                for selector in salary_selectors:
-                    try:
-                        salary_element = page.wait_for_selector(selector, timeout=2000)
-                        if salary_element:
-                            salary_info = salary_element.inner_text()
-                            print(f"\U0001F4B0 Found salary information using selector {selector}: {salary_info}")
-                            break
-                    except:
-                        continue
+                # Make sure we have a complete URL
+                if not job_url.startswith('http'):
+                    job_url = urljoin('https://www.indeed.com', job_url)
 
-            except Exception as e:
-                print(f"⚠️ No salary information found in HTML: {e}")
+                self.logger.info(f"Attempt {attempt + 1}/{max_retries} for job URL: {job_url}")
 
-            context.close()
+                # Try FlareSolverr first
+                try:
+                    flaresolverr_content = self.send_flaresolverr_request(job_url)
+                    if flaresolverr_content:
+                        context = browser.new_context(
+                            user_agent=random.choice(user_agents),
+                            viewport={'width': 1920, 'height': 1080},
+                            screen={'width': 1920, 'height': 1080}
+                        )
+                        Malenia.apply_stealth(context)
+                        page = context.new_page()
 
-            if window_data:
-                return {
-                    "hostQueryExecutionResult": window_data.get('hostQueryExecutionResult', {}),
-                    "salary_html": salary_info
-                }
-        except Exception as e:
-            print(f"❌ Failed to get job details from {job_url}: {e}")
+                        # Set the content with timeout
+                        page.set_content(flaresolverr_content, timeout=60000)
+                        page.wait_for_load_state('networkidle', timeout=15000)
+
+                    else:
+                        # If FlareSolverr fails, try direct navigation
+                        self.logger.warning("FlareSolverr failed, attempting direct navigation")
+                        context = browser.new_context(
+                            user_agent=random.choice(user_agents),
+                            viewport={'width': 1920, 'height': 1080},
+                            screen={'width': 1920, 'height': 1080}
+                        )
+                        Malenia.apply_stealth(context)
+                        page = context.new_page()
+                        page.goto(job_url, timeout=30000)
+                        page.wait_for_load_state('networkidle', timeout=15000)
+
+                    # Small delay for dynamic content
+                    time.sleep(random.uniform(2, 4))
+
+                    # Extract window data
+                    window_data = page.evaluate("() => window._initialData")
+
+                    # Extract salary information
+                    salary_info = None
+                    salary_selectors = [
+                        '.js-match-insights-provider-4pmm6z.e1wnkr790',
+                        '[data-testid="salaryInfo"]',
+                        '.salary-snippet-container',
+                        '.salaryText',
+                        '.jobsearch-JobMetadataHeader-item'
+                    ]
+
+                    for selector in salary_selectors:
+                        try:
+                            salary_element = page.wait_for_selector(selector, timeout=2000)
+                            if salary_element:
+                                salary_info = salary_element.inner_text()
+                                self.logger.info(f"\U0001F4B0 Found salary information: {salary_info}")
+                                break
+                        except:
+                            continue
+
+                    context.close()
+
+                    if window_data or salary_info:
+                        return {
+                            "hostQueryExecutionResult": window_data.get('hostQueryExecutionResult',
+                                                                        {}) if window_data else {},
+                            "salary_html": salary_info
+                        }
+
+                except Exception as e:
+                    self.logger.error(f"Error on attempt {attempt + 1}: {str(e)}")
+                    if attempt == max_retries - 1:
+                        # Take error screenshot on last attempt
+                        try:
+                            os.makedirs('error_screenshots', exist_ok=True)
+                            page.screenshot(path=f'error_screenshots/job_details_error_{attempt}.png')
+                        except:
+                            pass
+                    context.close()
+                    continue
+
+            except Exception as outer_e:
+                self.logger.error(f"Outer error on attempt {attempt + 1}: {str(outer_e)}")
+                if attempt == max_retries - 1:
+                    self.logger.error(f"❌ Failed to get job details after {max_retries} attempts")
+
         return None
 
     def save_to_file(self, job_url, host_query_execution_result):
@@ -430,21 +504,10 @@ class IndeedScraper:
         except Exception as e:
             print(f"\u274C Failed to save data to output.json: {e}")
 
-    def process_job_link(self, browser, job_url):
-        """Process a single job link and extract job details."""
-        try:
-            details = self.get_job_details(browser, job_url)
-            if details:
-                if details.get('hostQueryExecutionResult') or details.get('salary_html'):
-                    self.save_to_file(job_url, details)
-                    return True
-            return False
-        except Exception as e:
-            print(f"❌ Error processing job URL: {job_url} - {e}")
-            return False
 
     def process_job(self, job_url, browser):
         """Process individual job URLs."""
+
         try:
             details = self.get_job_details(browser, job_url)
             if details and (details.get('hostQueryExecutionResult') or details.get('salary_html')):

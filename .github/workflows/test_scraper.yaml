@@ -1,195 +1,80 @@
-name: Test Enhanced Indeed Scraper
+name: Job Scraper Cron
 
 on:
-  workflow_dispatch:
-    inputs:
-      category:
-        description: 'Job category to test'
-        required: false
-        default: 'python_developer'
-        type: choice
-        options:
-          - python_developer
-          - data_engineer
-          - data_scientist
+  schedule:
+    - cron: '0 */6 * * *'  # Runs every 6 hours
+  workflow_dispatch:  # Allows manual triggering
+
+env:
+  DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
 
 jobs:
-  test-enhanced-indeed-scraper:
+  scrape-jobs:
     runs-on: ubuntu-latest
-    env:
-      LINKEDIN_EMAIL: ${{ secrets.LINKEDIN_EMAIL }}
-      LINKEDIN_PASSWORD: ${{ secrets.LINKEDIN_PASSWORD }}
-      FLARESOLVERR_URL: http://localhost:8191/v1
+    strategy:
+      matrix:
+        job_category: [data_engineer, python_developer]  # Add more categories as needed
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+    - uses: actions/checkout@v3
 
-      - name: Install System Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            docker-compose \
-            xvfb \
-            libnss3 \
-            libgbm-dev \
-            libgtk-3-0 \
-            libxss1 \
-            libatk-bridge2.0-0 \
-            libx11-xcb1 \
-            libxcb-dri3-0 \
-            libdrm2 \
-            libgbm1 \
-            curl \
-            dnsutils \
-            chromium-browser \
-            chromium-chromedriver
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
 
-      - name: Set up Python Environment
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
+    - name: Create directories
+      run: |
+        mkdir -p data
+        mkdir -p error_screenshots
+        chmod 777 data error_screenshots
 
-      - name: Install Python Dependencies
-        run: |
-          python -m pip install --upgrade pip setuptools wheel
-          pip install \
-            playwright \
-            httpx \
-            requests \
-            pyyaml \
-            sqlalchemy \
-            -r requirements.actions.txt
-          playwright install chromium
-          playwright install-deps 
+    - name: Start services
+      run: |
+        docker-compose pull
+        docker-compose up -d db flaresolverr
+        echo "Waiting for services to be healthy..."
+        
+        # Wait for services to be ready
+        attempts=0
+        max_attempts=30
+        while [ $attempts -lt $max_attempts ]; do
+          if docker-compose ps | grep -q "healthy"; then
+            echo "Services are healthy"
+            break
+          fi
+          attempts=$((attempts + 1))
+          echo "Attempt $attempts/$max_attempts: Waiting for services..."
+          sleep 10
+        done
+        
+        if [ $attempts -eq $max_attempts ]; then
+          echo "Services failed to become healthy"
+          exit 1
+        fi
 
-      - name: Docker Network Setup
-        run: |
-          # Create network if it doesn't exist
-          docker network create job_network || true
+    - name: Run scraper
+      run: |
+        docker-compose run --rm scraper python -m app.scrapers.scraper_main \
+          --source indeed \
+          --category ${{ matrix.job_category }}
 
-          # List all networks
-          docker network ls
+    - name: Upload error screenshots
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: error-screenshots-${{ matrix.job_category }}
+        path: error_screenshots/
+        if-no-files-found: ignore
 
-          # Inspect bridge network
-          docker network inspect bridge
+    - name: Upload scraped data
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: scraped-data-${{ matrix.job_category }}
+        path: data/
+        if-no-files-found: warn
 
-      - name: Start FlareSolverr
-        run: |
-          # Start FlareSolverr with specific network
-          docker-compose up -d flaresolverr
-
-          # Wait for container to be ready
-          sleep 30  
-
-          # Get container IP
-          FLARESOLVERR_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' flaresolverr)
-          echo "FlareSolverr container IP: $FLARESOLVERR_IP"
-
-          # Test FlareSolverr directly
-          curl -v "http://$FLARESOLVERR_IP:8191/v1" || true
-          curl -v "http://localhost:8191/v1" || true
-
-          # Check logs
-          docker logs flaresolverr
-
-      - name: Check FlareSolverr Service
-        run: |
-          echo "Checking FlareSolverr service..."
-          
-          # Try different connection methods
-          echo "Trying localhost..."
-          curl -v -X POST http://localhost:8191/v1 \
-            -H "Content-Type: application/json" \
-            -d '{"cmd":"request.get","url":"https://example.com","maxTimeout":60000}'
-          
-          echo "Trying 127.0.0.1..."
-          curl -v -X POST http://127.0.0.1:8191/v1 \
-            -H "Content-Type: application/json" \
-            -d '{"cmd":"request.get","url":"https://example.com","maxTimeout":60000}'
-          
-          echo "Docker container logs:"
-          docker logs flaresolverr
-
-      - name: Collect FlareSolverr Logs on Failure
-        if: failure()
-        run: |
-          docker logs flaresolverr > flaresolverr_logs.txt
-
-      - name: Upload FlareSolverr Logs
-        if: failure()
-        uses: actions/upload-artifact@v3
-        with:
-          name: flaresolverr-logs
-          path: flaresolverr_logs.txt
-
-      - name: Network Diagnostics
-        run: |
-          echo "Hostname resolution:"
-          hostname
-          hostname -I
-          
-          echo "DNS Configuration:"
-          cat /etc/resolv.conf
-          
-          echo "Docker Networks:"
-          docker network ls
-          docker network inspect job_network || true
-          
-          echo "Docker Containers:"
-          docker ps
-          
-          echo "Checking FlareSolverr container:"
-          docker inspect flaresolverr
-          
-      - name: Advanced Network Debugging
-        run: |
-          echo "Detailed Network Diagnostics:"
-          
-          echo "--- Docker Network Configuration ---"
-          docker network inspect bridge
-          docker network inspect job_network || true
-          
-          echo "--- Host Network Interfaces ---"
-          ip addr show
-          
-          echo "--- Routing Table ---"
-          ip route
-          
-          echo "--- DNS Configuration ---"
-          cat /etc/resolv.conf
-          
-          echo "--- Testing FlareSolverr Connectivity ---"
-          curl -v http://localhost:8191/v1
-          docker run --network host curlimages/curl -v http://localhost:8191/v1
-
-      - name: Run Enhanced Indeed Scraper Test
-        env:
-          GITHUB_ACTIONS: 'true'
-          FLARESOLVERR_URL: 'http://localhost:8191/v1'
-          DOCKER_HOST_IP: 172.17.0.1
-        run: |
-          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python -m app.scrapers.scraper_main --test-indeed --category=${{ github.event.inputs.category }}
-
-      - name: List Generated Files
-        if: always()
-        run: |
-          echo "Directory contents:"
-          ls -la
-          echo "Screenshots directory:"
-          ls -la screenshots/ || echo "No screenshots found"
-
-      - name: Upload Screenshots as Artifacts
-        uses: actions/upload-artifact@v3
-        if: always()
-        with:
-          name: indeed-scraper-screenshots
-          path: |
-            screenshots/**/*.png
-            *.png
-          if-no-files-found: warn
-
-      - name: Cleanup Docker Services
-        if: always()
-        run: |
-          docker-compose down --remove-orphans
+    - name: Cleanup
+      if: always()
+      run: |
+        docker-compose down -v
+        docker system prune -f
