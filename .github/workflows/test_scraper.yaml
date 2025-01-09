@@ -19,37 +19,36 @@ jobs:
     env:
       LINKEDIN_EMAIL: ${{ secrets.LINKEDIN_EMAIL }}
       LINKEDIN_PASSWORD: ${{ secrets.LINKEDIN_PASSWORD }}
-      FLARESOLVERR_URL: http://flaresolverr:8191/v1
+      FLARESOLVERR_URL: http://host.docker.internal:8191/v1  # Host connection for GitHub runners
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-      - name: Install Docker Compose
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y docker-compose
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-
-      - name: Install system dependencies
+      - name: Install System Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
+            docker-compose \
             xvfb \
+            libnss3 \
             libgbm-dev \
             libgtk-3-0 \
-            libnss3 \
             libxss1 \
             libatk-bridge2.0-0 \
             libx11-xcb1 \
             libxcb-dri3-0 \
             libdrm2 \
-            libgbm1
+            libgbm1 \
+            curl \
+            dnsutils
 
-      - name: Install Python dependencies
+      - name: Set up Python Environment
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Python Dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel
           pip install -r requirements.actions.txt
@@ -57,57 +56,62 @@ jobs:
           playwright install chromium
           playwright install-deps
 
-      - name: Start Services
+      - name: Start FlareSolverr Service
         run: |
-          # Start services
-          docker-compose up -d
+          docker-compose up -d flaresolverr
+          
+          echo "Waiting for FlareSolverr to be ready..."
+          max_attempts=10
+          attempt=0
+          until docker run --network host curlimages/curl -s http://host.docker.internal:8191/health | grep "ok" || [ $attempt -eq $max_attempts ]; do
+            echo "Attempt $((attempt+1)) failed... retrying"
+            sleep 10
+            attempt=$((attempt+1))
+          done
+          
+          if [ $attempt -eq $max_attempts ]; then
+            echo "FlareSolverr failed to become ready"
+            docker-compose logs
+            exit 1
+          fi
+          
+          echo "FlareSolverr is ready"
 
-          # Wait for services to be ready
-          sleep 30
-
-      - name: Verify Network Configuration
+      - name: Debug Network Configuration
         run: |
-          # Display network interfaces
+          echo "Network interfaces:"
           ip addr
 
-          # Show Docker network details
+          echo "Docker networks:"
           docker network ls
-          docker network inspect job-compass_job_network
 
-          # List containers
+          echo "Inspecting Docker network 'job_network':"
+          docker network inspect job_network || true
+
+          echo "Current Docker containers:"
           docker ps
 
-          # Attempt to resolve service names
-          docker run --network job-compass_job_network \
-            nicolaka/netshoot cat /etc/resolv.conf
+          echo "Resolving FlareSolverr via nslookup:"
+          docker run --network job_network nicolaka/netshoot nslookup flaresolverr || echo "Failed to resolve FlareSolverr"
 
-          docker run --network job-compass_job_network \
-            nicolaka/netshoot nslookup flaresolverr
-
-      - name: Verify Services
-        run: |
-          docker ps
-          docker logs flaresolverr
-
-          # Check service connectivity
-          docker run --network job-compass_job_network \
-            curlimages/curl -v http://flaresolverr:8191/health || true
+          echo "Current DNS configuration:"
+          cat /etc/resolv.conf
 
       - name: Run Enhanced Indeed Scraper Test
+        env:
+          FLARESOLVERR_URL: http://host.docker.internal:8191/v1
         run: |
-          xvfb-run --auto-servernum \
-            --server-args="-screen 0 1920x1080x24" \
-            python -m app.scrapers.scraper_main --test-indeed
+          xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python -m app.scrapers.scraper_main --test-indeed --category=${{ github.event.inputs.category }}
 
-      - name: List generated files
+      - name: List Generated Files
         if: always()
         run: |
-          echo "Current directory contents:"
+          echo "Directory contents:"
           ls -la
-          echo "Screenshots directory contents:"
-          ls -la screenshots/ || echo "No screenshots directory"
+          echo "Screenshots directory:"
+          ls -la screenshots/ || echo "No screenshots found"
 
-      - name: Upload screenshots
+      - name: Upload Screenshots as Artifacts
         uses: actions/upload-artifact@v3
         if: always()
         with:
@@ -117,8 +121,7 @@ jobs:
             *.png
           if-no-files-found: warn
 
-      - name: Cleanup Docker services
+      - name: Cleanup Docker Services
         if: always()
         run: |
-          docker-compose down
-        continue-on-error: true
+          docker-compose down --remove-orphans
