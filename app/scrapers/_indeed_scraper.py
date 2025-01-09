@@ -121,9 +121,9 @@ class IndeedScraperEnhanced:
         """Send a GET request with FlareSolverr using requests with extensive error handling"""
         r_headers = {"Content-Type": "application/json"}
         payload = {
-            "cmd": "request.get",
+            "cmd": "request.post",  # Change to POST method
             "url": url,
-            "maxTimeout": 180000,  # 3 minutes
+            "maxTimeout": 180000,
             "returnOnlySolution": False,
             "sessions": True
         }
