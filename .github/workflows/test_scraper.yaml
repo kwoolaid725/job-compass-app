@@ -59,20 +59,36 @@ jobs:
 
       - name: Start Services
         run: |
-          # Verify Docker Compose version
-          docker-compose version
-
           # Start services
           docker-compose up -d
 
           # Wait for services to be ready
           sleep 30
 
+      - name: Verify Network Configuration
+        run: |
+          # Display network interfaces
+          ip addr
+
+          # Show Docker network details
+          docker network ls
+          docker network inspect job-compass_job_network
+
+          # List containers
+          docker ps
+
+          # Attempt to resolve service names
+          docker run --network job-compass_job_network \
+            nicolaka/netshoot cat /etc/resolv.conf
+
+          docker run --network job-compass_job_network \
+            nicolaka/netshoot nslookup flaresolverr
+
       - name: Verify Services
         run: |
           docker ps
           docker logs flaresolverr
-          
+
           # Check service connectivity
           docker run --network job-compass_job_network \
             curlimages/curl -v http://flaresolverr:8191/health || true

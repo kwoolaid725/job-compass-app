@@ -132,13 +132,22 @@ class IndeedScraperEnhanced:
                 self.logger.info(f"FlareSolverr URL: {self.flaresolverr_url}")
                 self.logger.info(f"Payload: {json.dumps(payload)}")
 
-                # Try multiple connection methods based on the configured URL
+                # Try multiple connection methods with IP resolution
                 connection_methods = [
                     self.flaresolverr_url,
                     'http://localhost:8191/v1',
                     'http://127.0.0.1:8191/v1',
                     'http://flaresolverr:8191/v1'
                 ]
+
+                # Attempt to resolve IP for flaresolverr
+                try:
+                    import socket
+                    flaresolverr_ip = socket.gethostbyname('flaresolverr')
+                    connection_methods.append(f'http://{flaresolverr_ip}:8191/v1')
+                    self.logger.info(f"Resolved flaresolverr IP: {flaresolverr_ip}")
+                except Exception as dns_error:
+                    self.logger.error(f"DNS resolution error: {dns_error}")
 
                 last_error = None
                 for connection_url in connection_methods:
@@ -150,8 +159,27 @@ class IndeedScraperEnhanced:
                                     read=180.0,  # Read timeout
                                     write=30.0,  # Write timeout
                                     pool=60.0  # Pool timeout
+                                ),
+                                # Add transport to bypass DNS issues
+                                transport=httpx.HTTPTransport(
+                                    retries=3,
+                                    verify=False  # Disable SSL verification if needed
                                 )
                         ) as client:
+                            # Additional network diagnostics
+                            try:
+                                import subprocess
+                                # Check network configuration
+                                network_check = subprocess.run(
+                                    ['ip', 'addr'],
+                                    capture_output=True,
+                                    text=True,
+                                    timeout=10
+                                )
+                                self.logger.info(f"Network configuration:\n{network_check.stdout}")
+                            except Exception as network_diag_error:
+                                self.logger.error(f"Network diagnostics error: {network_diag_error}")
+
                             response = client.post(
                                 url=connection_url,
                                 headers=r_headers,
