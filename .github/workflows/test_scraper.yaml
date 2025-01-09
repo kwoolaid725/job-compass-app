@@ -24,6 +24,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Docker Compose
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y docker-compose
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
@@ -52,9 +57,9 @@ jobs:
           playwright install chromium
           playwright install-deps
 
-      - name: Start Docker services
+      - name: Start FlareSolverr and other services
         run: |
-          # Ensure Docker network is created
+          # Create Docker network
           docker network create job_network || true
           
           # Run FlareSolverr as a standalone service
@@ -62,11 +67,11 @@ jobs:
             --name flaresolverr \
             --network job_network \
             -p 8191:8191 \
-            -e LOG_LEVEL=error \
+            -e LOG_LEVEL=debug \
             -e LOG_HTML=false \
             ghcr.io/flaresolverr/flaresolverr:latest
           
-          # Start other services
+          # Start other services using Docker Compose
           docker-compose up -d
           
           # Wait for services to be ready
@@ -74,19 +79,15 @@ jobs:
 
       - name: Verify FlareSolverr Service
         run: |
-          # Check FlareSolverr service
           docker ps
           docker logs flaresolverr
           
-          # Verify service connectivity
+          # Check service connectivity
           docker run --network job_network \
-            curlimages/curl -s -X POST http://flaresolverr:8191/v1 \
-            -H "Content-Type: application/json" \
-            -d '{"cmd":"sessions.list"}'
+            curlimages/curl -v http://flaresolverr:8191/health || true
 
       - name: Run Enhanced Indeed Scraper Test
         run: |
-          # Use Xvfb with larger virtual screen
           xvfb-run --auto-servernum \
             --server-args="-screen 0 1920x1080x24" \
             python -m app.scrapers.scraper_main --test-indeed

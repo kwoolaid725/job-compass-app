@@ -55,8 +55,67 @@ class IndeedScraperEnhanced:
         self.db_manager = db_manager
         self.logger = logger or logging.getLogger(__name__)
 
+    def is_cloudflare_blocked(self, response):
+        """
+        Detect Cloudflare blocking attempts
+
+        Args:
+            response: httpx response object
+
+        Returns:
+            bool: True if Cloudflare blocking is detected, False otherwise
+        """
+        # Check response headers
+        headers = response.headers
+        body_text = response.text.lower()
+
+        cloudflare_indicators = [
+            # Header-based checks
+            'cf-ray' in headers,
+            headers.get('server', '').lower() == 'cloudflare',
+            any('__cfuid' in cookie for cookie in headers.get('set-cookie', '')),
+
+            # Body text checks
+            'attention required!' in body_text,
+            'cloudflare ray id:' in body_text,
+            'ddos protection by cloudflare' in body_text,
+            'challenge-platform/h/g/challenge-platform' in body_text,
+            'cloudflare error 500s box' in body_text,
+            'just a moment...' in body_text,
+            'challenge is required' in body_text
+        ]
+
+        # If any indicator is True, log details
+        if any(cloudflare_indicators):
+            self.logger.warning("🚫 Cloudflare blocking detected!")
+
+            # Detailed logging
+            if 'cf-ray' in headers:
+                self.logger.warning(f"CF-Ray Header: {headers.get('cf-ray')}")
+
+            if headers.get('server', '').lower() == 'cloudflare':
+                self.logger.warning("Cloudflare server header detected")
+
+            # Screenshot mechanism (if possible in this context)
+            try:
+                os.makedirs('cloudflare_blocks', exist_ok=True)
+                timestamp = time.strftime("%Y%m%d_%H%M%S")
+                block_file = f'cloudflare_blocks/cloudflare_block_{timestamp}.txt'
+                with open(block_file, 'w', encoding='utf-8') as f:
+                    f.write("Cloudflare Block Detected\n\n")
+                    f.write("Headers:\n")
+                    f.write(json.dumps(dict(headers), indent=2))
+                    f.write("\n\nBody:\n")
+                    f.write(body_text[:2000])  # Limit body to first 2000 characters
+            except Exception as e:
+                self.logger.error(f"Error logging Cloudflare block: {e}")
+
+            return True
+
+        return False
+
     def send_flaresolverr_request(self, url: str, max_retries: int = 3):
-        """Send a GET request with FlareSolverr using httpx with extensive error handling"""
+        """Send a GET request with FlareSolverr using httpx with Cloudflare block detection"""
         r_headers = {"Content-Type": "application/json"}
         payload = {
             "cmd": "request.get",
@@ -70,7 +129,7 @@ class IndeedScraperEnhanced:
             try:
                 # Extensive logging
                 self.logger.info(f"FlareSolverr URL: {self.flaresolverr_url}")
-                self.logger.info(f"Payload: {json.dumps(payload)}")
+                self.logger.info(f"Attempting to fetch: {url}")
 
                 # Try multiple connection methods based on the configured URL
                 connection_methods = [
@@ -106,8 +165,21 @@ class IndeedScraperEnhanced:
                             response_data = response.json()
 
                             # Validate response
-                            if response_data.get('solution', {}).get('response'):
-                                return response_data['solution']['response']
+                            solution = response_data.get('solution', {})
+                            if solution.get('response'):
+                                # Additional Cloudflare block check in the solution
+                                response_html = solution.get('response', '').lower()
+                                cloudflare_html_indicators = [
+                                    'cloudflare' in response_html,
+                                    'attention required!' in response_html,
+                                    'just a moment...' in response_html
+                                ]
+
+                                if any(cloudflare_html_indicators):
+                                    self.logger.warning("⚠️ Cloudflare block detected in solution response")
+                                    continue
+
+                                return solution['response']
 
                             self.logger.warning(f"Invalid response from {connection_url}: {response_data}")
 
