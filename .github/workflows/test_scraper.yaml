@@ -80,7 +80,7 @@ jobs:
           docker-compose up -d flaresolverr
 
           # Wait for container to be ready
-          sleep 10
+          sleep 30  
 
           # Get container IP
           FLARESOLVERR_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' flaresolverr)
@@ -165,7 +165,8 @@ jobs:
 
       - name: Run Enhanced Indeed Scraper Test
         env:
-          FLARESOLVERR_URL: http://localhost:8191/v1
+          GITHUB_ACTIONS: 'true'
+          FLARESOLVERR_URL: 'http://localhost:8191/v1'
           DOCKER_HOST_IP: 172.17.0.1
         run: |
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python -m app.scrapers.scraper_main --test-indeed --category=${{ github.event.inputs.category }}

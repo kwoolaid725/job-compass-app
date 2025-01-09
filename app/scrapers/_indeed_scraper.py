@@ -124,50 +124,50 @@ class IndeedScraperEnhanced:
         payload = {
             "cmd": "request.get",
             "url": url,
-            "maxTimeout": 600000,
+            "maxTimeout": 300000,
             "returnOnlySolution": False,
             "sessions": True
         }
 
-        # Add Docker network inspection
-        try:
-            import subprocess
-            docker_networks = subprocess.check_output(['docker', 'network', 'ls']).decode()
-            self.logger.info(f"Docker networks:\n{docker_networks}")
+        # Different connection methods based on environment
+        if os.environ.get('GITHUB_ACTIONS'):
+            connection_methods = [
+                'http://localhost:8191/v1',
+                'http://127.0.0.1:8191/v1'
+            ]
+            self.logger.info("Running in GitHub Actions environment")
+        else:
+            connection_methods = [
+                'http://flaresolverr:8191/v1',
+                'http://localhost:8191/v1',
+                'http://127.0.0.1:8191/v1',
+                'http://172.17.0.1:8191/v1',
+            ]
+            self.logger.info("Running in local environment")
 
-            # Get FlareSolverr container IP
-            flaresolverr_ip = subprocess.check_output(
-                ['docker', 'inspect', '-f', '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}', 'flaresolverr']
-            ).decode().strip()
-            self.logger.info(f"FlareSolverr container IP: {flaresolverr_ip}")
-        except Exception as e:
-            self.logger.error(f"Docker inspection failed: {e}")
-
-        # Comprehensive connection methods with container IP
-        connection_methods = [
-            'http://localhost:8191/v1',
-            'http://127.0.0.1:8191/v1',
-            f'http://{os.environ.get("DOCKER_HOST_IP", "172.17.0.1")}:8191/v1'
-        ]
-
-        if flaresolverr_ip:
-            connection_methods.append(f'http://{flaresolverr_ip}:8191/v1')
+        # Remove duplicate connection methods while preserving order
+        connection_methods = list(dict.fromkeys(connection_methods))
 
         for attempt in range(max_retries):
             for connection_url in connection_methods:
                 try:
                     self.logger.info(f"Attempt {attempt + 1}, Trying URL: {connection_url}")
 
-                    # Test connectivity before making request
+                    # Test connectivity using health endpoint (remove /v1 for health check)
                     try:
                         import requests
-                        test_response = requests.get(f"{connection_url}/v1", timeout=5)
+                        base_url = connection_url.replace('/v1', '')
+                        health_url = f"{base_url}/health"
+                        self.logger.info(f"Checking health at: {health_url}")
+                        test_response = requests.get(health_url, timeout=5)
                         self.logger.info(f"Health check status: {test_response.status_code}")
+                        if test_response.status_code != 200:
+                            continue
                     except Exception as e:
-                        self.logger.warning(f"Health check failed for {connection_url}: {e}")
+                        self.logger.warning(f"Health check failed for {health_url}: {e}")
                         continue
 
-                    # Main request
+                    # Main request (use full connection_url which already includes /v1)
                     response = requests.post(
                         connection_url,
                         headers=r_headers,

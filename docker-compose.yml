@@ -31,8 +31,7 @@ services:
       retries: 3
     ports:
       - "8191:8191"
-    networks:
-      - job_network
+    network_mode: "host"
 
 networks:
   job_network:
