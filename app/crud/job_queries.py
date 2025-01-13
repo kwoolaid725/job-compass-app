@@ -354,20 +354,60 @@ def check_hardcoded_duplicates(db: Session):
     return duplicate_keys
 
 
-# Separate execution
+def get_raw_job_by_url(db: Session, job_url: str) -> List[Dict[str, Any]]:
+    """
+    Get all fields from raw_job_posts for a specific URL.
+
+    Args:
+        db (Session): Database session
+        job_url (str): The job URL to search for
+
+    Returns:
+        List[Dict[str, Any]]: List of jobs matching the URL with all their fields
+    """
+    try:
+        # Using text() for raw SQL
+        query = text("""
+        SELECT *
+        FROM raw_job_posts
+        WHERE job_url = :job_url;
+        """)
+
+        # Execute query with the URL parameter
+        result = db.execute(query, {'job_url': job_url})
+
+        # Convert rows to dictionaries properly using _mapping
+        jobs = [dict(row._mapping) for row in result]
+
+        if not jobs:
+            print(f"No jobs found for URL: {job_url}")
+            return []
+
+        return jobs
+
+    except Exception as e:
+        print(f"Error querying database: {str(e)}")
+        return []
+
+
 def main():
     with SessionLocal() as db:
-        job_key = "9fbe6877346e4ead"
-        jobs = find_indeed_job_by_key(db, job_key)
+        url = "https://www.indeed.com/viewjob?jk=d046e23687746180"
+        jobs = get_raw_job_by_url(db, url)
 
         if jobs:
-            print(f"\nFound {len(jobs)} jobs containing '{job_key}' in the URL:")
+            print("\nJob Details:")
             for job in jobs:
-                print(f"ID: {job['id']}, URL: {job['job_url']}, Source: {job['source']}, Processed: {job['processed']}")
+                print("\nFields found in job record:")
+                for field, value in job.items():
+                    if field == 'raw_content':
+                        print(f"\n{field}: [CONTENT LENGTH: {len(str(value))} chars]")
+                        print("First 200 characters of raw_content:")
+                        print(value[:200])
+                    else:
+                        print(f"{field}: {value}")
         else:
-            print(f"No jobs found with '{job_key}' in the URL.")
-
-        check_hardcoded_duplicates(db)
+            print(f"No jobs found with URL '{url}'")
 
 
 if __name__ == "__main__":

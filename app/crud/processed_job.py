@@ -43,18 +43,65 @@ def extract_salary_info(raw_job: RawJobPost) -> dict:
 
 
 def extract_job_details(raw_content: str) -> dict:
-    """Extract job details from Indeed's host_query_execution_results format"""
+    """Extract job details from Indeed's format"""
     try:
-        data = json.loads(raw_content)
-        if 'host_query_execution_result' in data:
+        data = json.loads(raw_content) if isinstance(raw_content, str) else raw_content
+
+        # If it's Indeed's API format
+        if isinstance(data, dict) and '__typename' in data and data.get('__typename') == 'Job':
+            return data  # Return as is since it's already in the correct format
+
+        # If it's the API format with host_query_execution_result
+        if isinstance(data, dict) and 'host_query_execution_result' in data:
             job_data = data['host_query_execution_result']['data']['jobData']['results'][0]['job']
             job_data['job_url'] = data.get('job_url')
             return job_data
-        return data
+
+        # If it's the simpler format with just basic fields
+        if isinstance(data, dict) and 'title' in data:
+            # Handle description that could be string or dict
+            description = data.get('description', '')
+            if isinstance(description, dict):
+                description_text = description.get('text', '') or description.get('html', '') or ''
+            else:
+                description_text = str(description) if description else ''
+
+            # Try to extract company from description if needed
+            company = data.get('company', '') or data.get('sourceEmployerName', '')
+            if not company and description_text:
+                first_line = description_text.split('\n')[0].strip()
+                if first_line:
+                    company = first_line
+
+            return {
+                'title': data.get('title', ''),
+                'description': {'text': description_text},
+                'sourceEmployerName': company or '',
+                'job_url': data.get('job_url', ''),
+                'attributes': [{'label': 'Full-time'}] if description_text and 'full' in description_text.lower() else [],
+                'benefits': [],
+                'location': {},
+                'datePublished': data.get('datePublished'),
+            }
+
+        # If nothing else matches, create a minimal valid structure
+        return {
+            'title': data.get('title', '') if isinstance(data, dict) else '',
+            'description': {'text': 'No description available'},
+            'sourceEmployerName': '',
+            'job_url': '',
+            'attributes': [],
+            'benefits': [],
+            'location': {},
+        }
+
+    except json.JSONDecodeError as e:
+        print(f"JSON decode error: {str(e)}")
+        raise ValueError(f"Failed to parse job details: Invalid JSON")
     except Exception as e:
+        print(f"Unexpected error in extract_job_details: {str(e)}")
+        print(f"Raw content preview: {str(raw_content)[:200]}")
         raise ValueError(f"Failed to parse job details: {str(e)}")
-
-
 
 def extract_base_job_info(job_details: Dict[str, Any]) -> Dict[str, Any]:
     """Extract basic job information"""

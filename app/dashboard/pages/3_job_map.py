@@ -9,15 +9,16 @@ import pandas as pd
 
 # Import the same status colors from dashboard
 STATUS_COLORS = {
-    "new": "#404040",
-    "applied": "#FF9800",  # Vibrant orange
-    "phone_screen": "#FFC107",  # Bright amber
-    "technical": "#8BC34A",  # Light green
-    "onsite": "#2196F3",  # Clear blue
-    "offer": "#AB47BC",  # Bold purple
-    "skipped": "#9E9E9E",  # Mid gray
-    "rejected": "#F44336"  # Strong red
+    "new": "fdf0d5",
+    "applied": "#faf0ca",
+    "phone_screen": "#f4d35e",
+    "technical": "#3bceac",
+    "onsite": "#0ead69",
+    "offer": "#f15bb5",
+    "skipped": "#9E9E9E",
+    "rejected": "#d90429"
 }
+
 
 
 def fetch_processed_jobs():

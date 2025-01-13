@@ -1,13 +1,15 @@
-#app/api/v1/endpoints.py
+# app/api/v1/endpoints.py
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.models.job import ProcessedJob, JobStatus, RawJobPost
-from app.schemas.job import ProcessedJobCreate, RawJobPostCreate, RawJobPost
+from app.schemas.job import ProcessedJobCreate, RawJobPostCreate
 from typing import Optional, List
 from sqlalchemy import desc, or_, Date, case, func, and_
 from datetime import datetime, date
+
 router = APIRouter(prefix="/jobs", tags=["jobs"])
+
 
 @router.post("/raw/")
 def create_raw_job(job: RawJobPostCreate, db: Session = Depends(get_db)):
@@ -17,24 +19,66 @@ def create_raw_job(job: RawJobPostCreate, db: Session = Depends(get_db)):
     db.refresh(db_job)
     return db_job
 
+
 @router.get("/raw/")
 def read_raw_jobs(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     jobs = db.query(RawJobPost).offset(skip).limit(limit).all()
     return jobs
 
 
-@router.get("/processed/")
-def read_processed_jobs(
-        skip: int = 0,
-        limit: int = 100,
+@router.get("/processed/count")
+def get_processed_jobs_count(
         status: List[str] = Query(None),
-        position_filter: str = Query(None),  # New: Filter by position/title
-        search_query: str = Query(None),  # New: Search in description/requirements
-        sort_by: Optional[str] = "date_posted",
-        sort_desc: bool = True,
+        position_filter: str = Query(None),
+        search_query: str = Query(None),
+        job_source: List[str] = Query(None),
         db: Session = Depends(get_db)
 ):
-    query = db.query(ProcessedJob)
+    """Get total count of jobs matching the filters"""
+    query = db.query(func.count(ProcessedJob.id))
+
+    if status:
+        query = query.filter(ProcessedJob.status.in_(status))
+
+    if position_filter:
+        query = query.filter(ProcessedJob.title.ilike(f"%{position_filter}%"))
+
+    if job_source:
+        query = query.join(ProcessedJob.raw_job_post).filter(
+            ProcessedJob.raw_job_post.has(RawJobPost.source.in_(job_source)))
+
+    if search_query:
+        search_terms = search_query.split()
+        search_filters = []
+        for term in search_terms:
+            search_filters.append(
+                or_(
+                    ProcessedJob.description.ilike(f"%{term}%"),
+                    ProcessedJob.requirements.ilike(f"%{term}%"),
+                    ProcessedJob.title.ilike(f"%{term}%")
+                )
+            )
+        if search_filters:
+            query = query.filter(and_(*search_filters))
+
+    total_count = query.scalar()
+    return {"total": total_count}
+
+
+@router.get("/processed/")
+def read_processed_jobs(
+    skip: int = 0,
+    limit: int = 100,
+    status: List[str] = Query(None),
+    position_filter: str = Query(None),
+    search_query: str = Query(None),
+    job_source: List[str] = Query(None),
+    sort_by: Optional[str] = "date_posted",
+    sort_desc: bool = True,
+    db: Session = Depends(get_db)
+):
+    # Start with base query and join with raw_job_post table
+    query = db.query(ProcessedJob).options(joinedload(ProcessedJob.raw_job_post))
 
     # Apply status filter
     if status:
@@ -43,6 +87,10 @@ def read_processed_jobs(
     # Apply position/title filter
     if position_filter:
         query = query.filter(ProcessedJob.title.ilike(f"%{position_filter}%"))
+
+    # Apply job source filter using the joined model
+    if job_source:
+        query = query.join(ProcessedJob.raw_job_post).filter(ProcessedJob.raw_job_post.has(RawJobPost.source.in_(job_source)))
 
     # Apply search query to description and requirements
     if search_query:
@@ -63,7 +111,7 @@ def read_processed_jobs(
     sort_column = getattr(ProcessedJob, sort_by, ProcessedJob.date_posted)
     query = query.order_by(desc(sort_column) if sort_desc else sort_column)
 
-    # Execute query with pagination
+    # Apply pagination
     jobs = query.offset(skip).limit(limit).all()
 
     # Serialize results
@@ -98,7 +146,6 @@ def read_processed_jobs(
     return serializable_jobs
 
 
-# Optionally, add an endpoint to get a single processed job
 @router.get("/processed/{job_id}")
 def read_processed_job(job_id: int, db: Session = Depends(get_db)):
     job = db.query(ProcessedJob).filter(ProcessedJob.id == job_id).first()
@@ -131,18 +178,12 @@ def read_processed_job(job_id: int, db: Session = Depends(get_db)):
 
 @router.put("/processed/{job_id}/status")
 def update_job_status(job_id: int, status_update: dict, db: Session = Depends(get_db)):
-    # Simple debug prints
-    print("=== DEBUG ===")
-    print(f"Job ID: {job_id}")
-    print(f"Status Update: {status_update}")
-
     job = db.query(ProcessedJob).filter(ProcessedJob.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    # Convert the incoming status to the correct enum format
     try:
-        new_status = JobStatus[status_update["status"].upper()]  # This will match the enum
+        new_status = JobStatus[status_update["status"].upper()]
         job.status = new_status
         db.commit()
         db.refresh(job)
@@ -161,8 +202,6 @@ def update_job_status(job_id: int, status_update: dict, db: Session = Depends(ge
 @router.get("/analytics")
 def get_job_analytics(db: Session = Depends(get_db)):
     """Get analytics for processed jobs"""
-    from sqlalchemy import func
-
     # Salary analytics
     salary_stats = db.query(
         func.avg(ProcessedJob.salary_min).label('avg_min'),
@@ -216,11 +255,9 @@ def get_job_analytics(db: Session = Depends(get_db)):
 
 @router.get("/status-analytics")
 def get_status_analytics(db: Session = Depends(get_db)):
-    from sqlalchemy import func
-
     status_by_date = db.query(
         func.date(ProcessedJob.updated_at).label('date'),
-        func.max(ProcessedJob.updated_at).label('updated_at'),  # Latest update for the day
+        func.max(ProcessedJob.updated_at).label('updated_at'),
         func.count(case((ProcessedJob.status == JobStatus.NEW, 1))).label('new'),
         func.count(case((ProcessedJob.status == JobStatus.APPLIED, 1))).label('applied'),
         func.count(case((ProcessedJob.status == JobStatus.PHONE_SCREEN, 1))).label('phone_screen'),
@@ -236,8 +273,6 @@ def get_status_analytics(db: Session = Depends(get_db)):
         func.date(ProcessedJob.updated_at)
     ).all()
 
-
-
     # Current status distribution
     current_status = db.query(
         ProcessedJob.status,
@@ -251,9 +286,6 @@ def get_status_analytics(db: Session = Depends(get_db)):
         }
         for stat in current_status if stat.status
     ]
-
-    # Daily status counts
-    today = date.today()
 
     timeline_data = [
         {
@@ -281,7 +313,6 @@ def get_day_status_details(date: str, db: Session = Depends(get_db)):
     try:
         target_date = datetime.strptime(date, "%Y-%m-%d").date()
 
-        # Get all jobs updated on this date with their previous status
         jobs = db.query(
             ProcessedJob.id,
             ProcessedJob.title,
@@ -308,3 +339,10 @@ def get_day_status_details(date: str, db: Session = Depends(get_db)):
 
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format")
+
+@router.get("/sources")  # Changed from "/jobs/sources" to "/sources"
+def get_job_sources(db: Session = Depends(get_db)):
+    """Get all unique job sources"""
+    query = db.query(RawJobPost.source).distinct()
+    sources = [source[0] for source in query.all()]
+    return {"sources": sorted(sources)}

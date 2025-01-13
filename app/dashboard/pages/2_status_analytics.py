@@ -5,7 +5,8 @@ from streamlit_calendar import calendar
 from datetime import datetime, timedelta
 import requests
 
-API_BASE_URL = "http://localhost:8000"
+
+API_BASE_URL = "http://localhost:8000"  
 
 def fetch_status_analytics():
     try:
@@ -97,6 +98,16 @@ def fetch_day_details(date_str):
         return response.json()
     except requests.exceptions.RequestException as e:
         st.error(f"Error fetching details: {str(e)}")
+        return None
+
+def fetch_job_details(job_id):
+    """Fetch full details for a specific job"""
+    try:
+        response = requests.get(f"{API_BASE_URL}/jobs/processed/{job_id}")
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        st.error(f"Error fetching job details: {str(e)}")
         return None
 
 def main():

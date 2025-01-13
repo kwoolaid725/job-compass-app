@@ -106,7 +106,7 @@ class IndeedScraper:
     def run(self):
         """Modified run method to use FlareSolverr with improved content loading"""
         with sync_playwright() as p:
-            for start in range(40, self.max_pages * 10, 10):
+            for start in range(0, self.max_pages * 10, 10):
                 # Use FlareSolverr to get the page content
                 page_url = f"{self.user_input.url}&start={start}"
                 flaresolverr_content = self.send_flaresolverr_request(page_url)
