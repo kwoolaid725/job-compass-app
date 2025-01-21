@@ -15,15 +15,6 @@ import logging
 from undetected_playwright import Malenia
 import httpx
 import math
-from dotenv import load_dotenv
-from pathlib import Path
-
-
-PROJECT_ROOT = Path(__file__).parent.parent
-
-# Load .env file from the project root
-load_dotenv(dotenv_path=PROJECT_ROOT / '.env')
-
 
 # Enhanced User-Agents list
 user_agents = [
@@ -44,6 +35,7 @@ class UserInput:
 
 class IndeedScraper:
     def __init__(self, user_input: UserInput, max_pages: int = 10,
+                 flaresolverr_url: str = 'http://localhost:8191/v1',
                  existing_urls: Optional[set] = None,
                  job_source: Optional[JobSource] = None,
                  job_category: Optional[JobCategory] = None,
@@ -57,8 +49,7 @@ class IndeedScraper:
         self.db_manager = db_manager  # Database manager for DB access
         self.existing_urls = existing_urls if existing_urls is not None else self.load_existing_job_urls()
         self.logger = logger or logging.getLogger(__name__)
-        self.flaresolverr_url = os.getenv("FLARESOLVERR_URL", "http://localhost:8191/v1")
-
+        self.flaresolverr_url = flaresolverr_url
 
     def get_indeed_job_key(self, url: str) -> str:
         """Extract job key from an Indeed URL."""
