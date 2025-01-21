@@ -1,20 +1,21 @@
 # Core dependencies
-playwright==1.40.0
-playwright-stealth==1.0.6
-undetected-playwright==0.3.0
-httpx==0.25.2
+playwright
+playwright-stealth
+undetected-playwright
+httpx
+pydantic-settings
 
 # Database
-sqlalchemy==2.0.23
-psycopg2-binary==2.9.9
+sqlalchemy
+psycopg2-binary
 
 # Environment and Config
-python-dotenv==1.0.0
+python-dotenv
 
 # Utilities
-requests==2.31.0
-urllib3==2.0.7
+requests
+urllib3
 
 # Optional but recommended
-tenacity==8.2.3  # For retries
-python-dateutil==2.8.2  # For date handling
+tenacity
+python-dateutil

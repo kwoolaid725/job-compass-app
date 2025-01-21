@@ -4,30 +4,25 @@ import os
 from dataclasses import dataclass
 from app.scrapers.indeed_scraper import IndeedScraper
 from app.scrapers.linkedin_scraper import LinkedInScraper
+from app.scrapers.builtinchicago_scraper import BuiltInChicagoScraper
 from app.models.job import JobSource, JobCategory
 from app.db.database_manager import DatabaseManager
 from dotenv import load_dotenv
 
 from app.scrapers._indeed_scraper import IndeedScraperEnhanced
+from pathlib import Path
 
-# Create logs directory if not exists
-log_dir = "logs"
-os.makedirs(log_dir, exist_ok=True)
-
-# Configure logging
+# Setup basic console logging
 logging.basicConfig(
-    filename=os.path.join(log_dir, 'scraper.log'),
     level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler()
+    ]
 )
 
 # Create logger instance
 logger = logging.getLogger("JobScraperLogger")
-
-# Add console output
-console_handler = logging.StreamHandler()
-console_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
-logger.addHandler(console_handler)
 
 load_dotenv()
 
@@ -90,15 +85,18 @@ def run_single_scraper(source: JobSource, category: JobCategory, max_pages: int)
     urls = {
         'python_developer': {
             'indeed': "https://www.indeed.com/jobs?q=python+developer&sort=date",
-            'linkedin': "https://www.linkedin.com/jobs/search/?keywords=python%20developer&f_TPR=r604800"
+            'linkedin': "https://www.linkedin.com/jobs/search/?keywords=python%20developer&f_TPR=r604800",
+            'builtinchicago': "https://builtin.com/jobs?search=python+developer&city=Chicago&state=IL&country=USA"
         },
         'data_engineer': {
             'indeed': "https://www.indeed.com/jobs?q=data+engineer&sort=date",
-            'linkedin': "https://www.linkedin.com/jobs/search/?keywords=data+engineer&f_TPR=r604800"
+            'linkedin': "https://www.linkedin.com/jobs/search/?keywords=data+engineer&f_TPR=r604800",
+            'builtinchicago': "https://builtin.com/jobs?search=data+engineer&city=Chicago&state=IL&country=USA"
         },
         'data_scientist': {
             'indeed': "https://www.indeed.com/jobs?q=data+scientist&sort=date",
-            'linkedin': "https://www.linkedin.com/jobs/search/?keywords=data+scientist&f_TPR=r604800"
+            'linkedin': "https://www.linkedin.com/jobs/search/?keywords=data+scientist&f_TPR=r604800",
+            'builtinchicago': "https://builtin.com/jobs?search=data+scientist&city=Chicago&state=IL&country=USA"
         }
     }
 
@@ -123,7 +121,16 @@ def run_single_scraper(source: JobSource, category: JobCategory, max_pages: int)
             max_pages=max_pages,
             logger=logger
         )
-
+    elif source == JobSource.BUILTINCHICAGO:
+        scraper = BuiltInChicagoScraper(
+            user_input=user_input,
+            db_manager=db_manager,
+            job_source=source,
+            job_category=category,
+            max_pages=max_pages,
+            logger=logger
+        )
+    logger.info(f" -- Scraper Version 250119-- ")
     logger.info(f"🚀 Starting to scrape {source.name} for {category.name} jobs...")
     scraper.run()
 
@@ -137,6 +144,9 @@ def run_all_combinations(max_pages: int):
         (JobSource.LINKEDIN, JobCategory.DATA_ENGINEER),
         (JobSource.INDEED, JobCategory.DATA_SCIENTIST),
         (JobSource.LINKEDIN, JobCategory.DATA_SCIENTIST),
+        (JobSource.BUILTINCHICAGO, JobCategory.PYTHON_DEVELOPER),
+        (JobSource.BUILTINCHICAGO, JobCategory.DATA_ENGINEER),
+        (JobSource.BUILTINCHICAGO, JobCategory.DATA_SCIENTIST)
     ]
 
     for source, category in combinations:
@@ -145,7 +155,7 @@ def run_all_combinations(max_pages: int):
 
 def main():
     parser = argparse.ArgumentParser(description="Job Scraper")
-    parser.add_argument("--source", type=str, choices=["indeed", "linkedin"],
+    parser.add_argument("--source", type=str, choices=["indeed", "linkedin", "builtinchicago"],
                         help="Source to scrape (indeed or linkedin)")
     parser.add_argument("--category", type=str, choices=["python_developer", "data_engineer", "data_scientist"],
                         help="Job category")
@@ -194,3 +204,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# python -m app.scrapers.scraper_main --source builtinchicago --category data_engineer

@@ -1,0 +1,57 @@
+Python
+SQL
+PostgreSQL
+ETL
+PyTorch
+PySpark
+FastAPI
+AWS
+Spark
+Hadoop
+Java
+Scala
+Pandas
+NumPy
+scikit-learn
+TensorFlow
+Docker
+Kubernetes
+Airflow
+Kafka
+Git
+Machine Learning
+Data Analysis
+Data Visualization
+Deep Learning
+Natural Language Processing
+C++
+JavaScript
+React
+Django
+Flask
+Ruby on Rails
+PHP
+C#
+TypeScript
+Excel
+PowerBI
+Tableau
+NoSQL
+GitHub
+GitLab
+Agile
+Scrum
+DevOps
+CI/CD
+REST APIs
+GraphQL
+HTML
+CSS
+Artificial Intelligence
+Node
+ELT
+Cloud
+VBA
+
+Data Science
+Extract Transform Load

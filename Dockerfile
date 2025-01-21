@@ -1,6 +1,16 @@
 FROM python:3.11-slim
 
-# Install system dependencies
+# ------------------------------------------------------------------------------
+# 1) Use a more reliable APT mirror and add retry logic
+# ------------------------------------------------------------------------------
+RUN echo 'Acquire::Retries "3";' > /etc/apt/apt.conf.d/80-retries \
+    && echo "deb http://mirror.csclub.uwaterloo.ca/debian/ bookworm main" > /etc/apt/sources.list \
+    && echo "deb http://mirror.csclub.uwaterloo.ca/debian-security/ bookworm-security main" >> /etc/apt/sources.list \
+    && echo "deb http://mirror.csclub.uwaterloo.ca/debian/ bookworm-updates main" >> /etc/apt/sources.list
+
+# ------------------------------------------------------------------------------
+# 2) Install system dependencies (as root)
+# ------------------------------------------------------------------------------
 RUN apt-get update && apt-get install -y \
     chromium \
     chromium-driver \
@@ -15,40 +25,80 @@ RUN apt-get update && apt-get install -y \
     iputils-ping \
     dnsutils \
     net-tools \
+    sudo \
     && rm -rf /var/lib/apt/lists/*
 
-# Set environment variables
+# ------------------------------------------------------------------------------
+# 3) Set up environment variables for Chromium & Python
+# ------------------------------------------------------------------------------
 ENV CHROME_BIN=/usr/bin/chromium \
     CHROME_PATH=/usr/lib/chromium/ \
     CHROMEDRIVER_PATH=/usr/bin/chromedriver \
     PYTHONPATH=/app \
     PYTHONUNBUFFERED=1
 
-# Set up working directory
-WORKDIR /app
+# ------------------------------------------------------------------------------
+# 4) Create airflow user & groups while still root
+# ------------------------------------------------------------------------------
+ARG UID=1000
+ARG GID=1000
+ARG DOCKER_GROUP_ID=999
 
-# Upgrade pip and install requirements
-COPY requirements.actions.txt .
+RUN if ! getent group docker > /dev/null 2>&1; then \
+        groupadd -g ${DOCKER_GROUP_ID} docker || true; \
+    fi && \
+    if ! getent group ${GID} > /dev/null 2>&1; then \
+        groupadd -g ${GID} airflowgroup; \
+    fi && \
+    useradd -m -u ${UID} -g ${GID} -s /bin/bash airflow || true && \
+    usermod -aG docker airflow || true && \
+    usermod -aG sudo airflow && \
+    echo "airflow ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# ------------------------------------------------------------------------------
+# 5) Switch to airflow user BEFORE installing Python deps & Playwright
+#    This ensures the browsers go into /home/airflow/.cache
+# ------------------------------------------------------------------------------
+USER airflow
+WORKDIR /home/airflow
+
+# Copy in your requirements file to the airflow home (or keep in /app)
+COPY requirements.actions.txt /home/airflow/requirements.actions.txt
+
 RUN python -m pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.actions.txt
 
-# Install playwright and its dependencies
-RUN playwright install chromium && \
-    playwright install-deps chromium
+# Install Playwright and the Chromium browser as airflow user
+RUN python -m pip install playwright && \
+    python -m playwright install chromium && \
+    python -m playwright install-deps chromium
 
-# Create necessary directories
-RUN mkdir -p app/logs data error_screenshots && \
-    chmod -R 777 app/logs data error_screenshots
+# ------------------------------------------------------------------------------
+# 6) Switch briefly back to root to fix /app/logs permissions (if needed)
+# ------------------------------------------------------------------------------
+USER root
+WORKDIR /app
+RUN mkdir -p /app/logs \
+    && chown airflow:root /app/logs \
+    && chmod 775 /app/logs
 
-# Copy application code
+# ------------------------------------------------------------------------------
+# 7) Switch back to airflow user for final runtime
+# ------------------------------------------------------------------------------
+USER airflow
+WORKDIR /app
+
+# ------------------------------------------------------------------------------
+# 8) Copy your application code
+# ------------------------------------------------------------------------------
 COPY ./app ./app
 
-# Create volume mount points
-VOLUME ["/app/data", "/app/error_screenshots", "/app/logs"]
+# ------------------------------------------------------------------------------
+# 9) Create volume mount points with proper permissions
+# ------------------------------------------------------------------------------
+VOLUME ["/app/logs", "/app/data", "/app/error_screenshots"]
 
-# Add healthcheck
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://flaresolverr:8191/v1 || exit 1
-
-# Default command
+# ------------------------------------------------------------------------------
+# 10) Default command
+# ------------------------------------------------------------------------------
 CMD ["python", "-m", "app.scrapers.scraper_main", "--source", "indeed", "--category", "data_engineer"]
