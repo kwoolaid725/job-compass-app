@@ -1,0 +1,163 @@
+job_sites:
+    - name: "Indeed"
+      domain: "www.dwr.com"
+      element_classes:
+        - "pdp-navigation-bar"
+        - "pdp-specifications-accordion-wrap"
+        - "pdp-summary-accordion-wrap pdp-pad"
+
+    - name: "LinkedIn"
+      domain: "www.bludot.com"
+      element_classes:
+        - "section dimensions"
+        - "wrapper-container"
+
+    - name: "BuiltInChicago"
+      domain: "www.crateandbarrel.com"
+      element_classes:
+        - "product-row full-width"
+
+    - name: "Google"
+      domain: "store.steelcase.com"
+      element_classes:
+        - "product-details__container"
+        - "panel panel-default product-details-page-accordion__container"
+
+    - name: "Amazon"
+      domain: "allsteeloffice.com"
+      element_classes:
+        # need to click on the "mxt-btn mxt-btn-icon-only mxt-btn-dimensions" to get the dimensions
+
+    - name: "Meta"
+      domain: "store.hermanmiller.com"
+      element_classes:
+        - "primary-images carousel-hero col-12"
+        - "product-name-row row d-lg-none no-print"
+        - "prices pdp-prices"
+        - "col-12 ml-sm-auto product-info-section"
+        - "pdp-summary-accordion-wrap pdp-pad"
+
+    - name: "Netflix"
+      domain: "www.wayfair.com"
+      element_classes:
+        - "kzv0b81_6112 kzv0b82t_6112 kzv0b86e_6112 kzv0b81yc_6112 l5osrp1_6112"
+
+    - name: "Uber"
+      domain: "www.ikea.com"
+      element_classes:
+        - "js-product-gallery pip-product-gallery"
+        - "pip-product__buy-module-container"
+        - "pip-product__left-bottom-container"
+        - "js-product-information-section pip-product-information-section"
+
+    - name: "Microsoft"
+      domain: "www.ikea.com"
+      element_classes:
+        - "js-product-gallery pip-product-gallery"
+        - "pip-product__buy-module-container"
+        - "pip-product__left-bottom-container"
+        - "js-product-information-section pip-product-information-section"
+
+    - name: "Nvidia"
+      domain: "www.ikea.com"
+      element_classes:
+        - "js-product-gallery pip-product-gallery"
+        - "pip-product__buy-module-container"
+        - "pip-product__left-bottom-container"
+        - "js-product-information-section pip-product-information-section"
+
+    - name: "Intel"
+      domain: "www.ikea.com"
+      element_classes:
+        - "js-product-gallery pip-product-gallery"
+        - "pip-product__buy-module-container"
+        - "pip-product__left-bottom-container"
+        - "js-product-information-section pip-product-information-section"
+
+    - name: "Salesforce"
+      domain: "www.ikea.com"
+      element_classes:
+        - "js-product-gallery pip-product-gallery"
+        - "pip-product__buy-module-container"
+        - "pip-product__left-bottom-container"
+        - "js-product-information-section pip-product-information-section"
+
+    - name: "IBM"
+      domain: "www.ikea.com"
+      element_classes:
+        - "js-product-gallery pip-product-gallery"
+        - "pip-product__buy-module-container"
+        - "pip-product__left-bottom-container"
+        - "js-product-information-section pip-product-information-section"
+
+    - name: "Intel"
+      domain: "www.ikea.com"
+      element_classes:
+        - "js-product-gallery pip-product-gallery"
+        - "pip-product__buy-module-container"
+        - "pip-product__left-bottom-container"
+        - "js-product-information-section pip-product-information-section"
+
+    - name: "Tesla"
+      domain: "www.ikea.com"
+      element_classes:
+        - "js-product-gallery pip-product-gallery"
+        - "pip-product__buy-module-container"
+        - "pip-product__left-bottom-container"
+        - "js-product-information-section pip-product-information-section"
+
+    - name: "AirBnB"
+      domain: "www.ikea.com"
+      element_classes:
+        - "js-product-gallery pip-product-gallery"
+        - "pip-product__buy-module-container"
+        - "pip-product__left-bottom-container"
+        - "js-product-information-section pip-product-information-section"
+
+    - name: "Paypal"
+      domain: "www.ikea.com"
+      element_classes:
+        - "js-product-gallery pip-product-gallery"
+        - "pip-product__buy-module-container"
+        - "pip-product__left-bottom-container"
+        - "js-product-information-section pip-product-information-section"
+
+    - name: "Spotify"
+      domain: "www.ikea.com"
+      element_classes:
+        - "js-product-gallery pip-product-gallery"
+        - "pip-product__buy-module-container"
+        - "pip-product__left-bottom-container"
+        - "js-product-information-section pip-product-information-section"
+
+    - name: "Abbvie"
+      domain: "www.ikea.com"
+      element_classes:
+        - "js-product-gallery pip-product-gallery"
+        - "pip-product__buy-module-container"
+        - "pip-product__left-bottom-container"
+        - "js-product-information-section pip-product-information-section"
+
+    - name: "Databricks"
+      domain: "www.ikea.com"
+      element_classes:
+        - "js-product-gallery pip-product-gallery"
+        - "pip-product__buy-module-container"
+        - "pip-product__left-bottom-container"
+        - "js-product-information-section pip-product-information-section"
+
+    - name: "Walgreens"
+      domain: "www.ikea.com"
+      element_classes:
+        - "js-product-gallery pip-product-gallery"
+        - "pip-product__buy-module-container"
+        - "pip-product__left-bottom-container"
+        - "js-product-information-section pip-product-information-section"
+
+    - name: "Abbvie"
+      domain: "www.ikea.com"
+      element_classes:
+        - "js-product-gallery pip-product-gallery"
+        - "pip-product__buy-module-container"
+        - "pip-product__left-bottom-container"
+        - "js-product-information-section pip-product-information-section"

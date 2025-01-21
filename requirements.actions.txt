@@ -1,0 +1,21 @@
+# Core dependencies
+playwright
+playwright-stealth
+undetected-playwright
+httpx
+pydantic-settings
+
+# Database
+sqlalchemy
+psycopg2-binary
+
+# Environment and Config
+python-dotenv
+
+# Utilities
+requests
+urllib3
+
+# Optional but recommended
+tenacity
+python-dateutil

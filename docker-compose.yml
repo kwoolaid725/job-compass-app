@@ -1,0 +1,182 @@
+version: '3.8'
+
+services:
+  ###################################
+  # Postgres
+  ###################################
+  db:
+    image: postgres:15
+    container_name: job_postings
+    environment:
+      - POSTGRES_USER=${DATABASE_USERNAME}         # e.g. postgres
+      - POSTGRES_PASSWORD=${DATABASE_PASSWORD}     # e.g. secret
+      - POSTGRES_MULTIPLE_DATABASES=job_postings,airflow
+    networks:
+      - scraper_network
+    volumes:
+      - ./init-multiple-databases.sh:/docker-entrypoint-initdb.d/init-multiple-databases.sh
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USERNAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ###################################
+  # Custom Scraper
+  ###################################
+  scraper:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        UID: "${UID:-1000}"
+        GID: "${GID:-1000}"
+    environment:
+      - DATABASE_HOSTNAME=db
+      - DATABASE_PORT=5432
+      - DATABASE_USERNAME=${DATABASE_USERNAME}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD}
+      - DATABASE_NAME=${DATABASE_NAME}
+      - FLARESOLVERR_URL=http://flaresolverr:8191/v1
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./app:/app/app
+      - ./data:/app/data
+      - ./error_screenshots:/app/error_screenshots
+      - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      - "999"
+    networks:
+      - scraper_network
+
+  ###################################
+  # FlareSolverr
+  ###################################
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    ports:
+      - "8191:8191"
+    networks:
+      - scraper_network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8191/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  ###################################
+  # Airflow Init (DB Migration + User)
+  ###################################
+  airflow-init:
+    image: apache/airflow:2.7.1
+    container_name: airflow-init
+    depends_on:
+      db:
+        condition: service_healthy
+    # The new recommended variable is _AIRFLOW_DB_MIGRATE (instead of _AIRFLOW_DB_UPGRADE).
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: "postgresql+psycopg2://${DATABASE_USERNAME}:${DATABASE_PASSWORD}@db:5432/airflow"
+      _AIRFLOW_DB_MIGRATE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+      _AIRFLOW_WWW_USER_USERNAME: 'admin'
+      _AIRFLOW_WWW_USER_PASSWORD: 'admin'
+    networks:
+      - scraper_network
+    # Mount the init script
+    volumes:
+      - ./airflow-init.sh:/airflow-init.sh
+    entrypoint: [ "bash", "/airflow-init.sh" ]
+    command:
+      - bash
+      - -c
+      - |
+        echo 'Running airflow db upgrade...'
+        airflow db upgrade
+        echo 'Creating admin user...'
+        airflow users create \
+          --username admin \
+          --password admin \
+          --firstname Admin \
+          --lastname User \
+          --role Admin \
+          --email admin@example.co
+
+
+  ###################################
+  # Airflow Webserver
+  ###################################
+  airflow-webserver:
+    image: apache/airflow:2.7.1
+    container_name: airflow-webserver
+    user: "root"  # Start as root temporarily
+    depends_on:
+      - airflow-init
+      - db
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: "postgresql+psycopg2://${DATABASE_USERNAME}:${DATABASE_PASSWORD}@db:5432/airflow"
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY}
+      AIRFLOW__WEBSERVER__WEB_SERVER_HOST: 0.0.0.0
+      AIRFLOW__WEBSERVER__WEB_SERVER_PORT: 8080
+      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'true'
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - airflow_logs:/opt/airflow/logs
+      - ./job_logs:/opt/airflow/job_logs
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./app:/opt/airflow/app
+    networks:
+      - scraper_network
+    ports:
+      - "8080:8080"
+    entrypoint: [ "/bin/bash", "-c" ]
+    command:
+      - |
+        groupadd -g 999 docker || true
+        usermod -aG docker airflow
+        chown root:docker /var/run/docker.sock
+        chmod 660 /var/run/docker.sock
+        exec su airflow -c 'airflow webserver'
+
+  ###################################
+  # Airflow Scheduler
+  ###################################
+  airflow-scheduler:
+    image: apache/airflow:2.7.1
+    container_name: airflow-scheduler
+    user: "root"  # Start as root temporarily
+    depends_on:
+      - airflow-init
+      - db
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: "postgresql+psycopg2://${DATABASE_USERNAME}:${DATABASE_PASSWORD}@db:5432/airflow"
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - airflow_logs:/opt/airflow/logs
+      - ./job_logs:/opt/airflow/job_logs
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./app:/opt/airflow/app
+    networks:
+      - scraper_network
+    entrypoint: [ "/bin/bash", "-c" ]
+    command:
+      - |
+        groupadd -g 999 docker || true
+        usermod -aG docker airflow
+        chown root:docker /var/run/docker.sock
+        chmod 660 /var/run/docker.sock
+        exec su airflow -c 'airflow scheduler'
+
+networks:
+  scraper_network:
+    driver: bridge
+
+volumes:
+  pgdata:
+  airflow_logs:
+  scraper_logs:
