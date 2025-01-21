@@ -76,19 +76,19 @@ flowchart TB
     style Frontend fill:#e8eaf6,stroke:#3f51b5,stroke-width:1px
 ```
 
-### 1.Data Collection Layer
+### 1. Data Collection Layer
 - Scheduled Airflow DAGs for job scraping
 - Source-specific scrapers with error handling
 - Raw data storage in PostgreSQL
 
-### 2.Processing Layer
+### 2. Processing Layer
 - Duplicates detection while scraping to ensure no repeated job entries
 - Job data normalization adn enrichment
 - Skill extraction and categorization
 - Salary standardization
 - Location data processing
 
-### 3.Analytics Layer
+###  3.Analytics Layer
 - REST API for data access
 - Interactive dashboard
 - Real-time filtering and analysis
