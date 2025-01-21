@@ -75,3 +75,42 @@ flowchart TB
     style API fill:#f3e5f5,stroke:#8e24aa,stroke-width:1px
     style Frontend fill:#e8eaf6,stroke:#3f51b5,stroke-width:1px
 ```
+
+### 1.Data Collection Layer
+- Scheduled Airflow DAGs for job scraping
+- Source-specific scrapers with error handling
+- Raw data storage in PostgreSQL
+
+### 2.Processing Layer
+- Duplicates detection while scraping to ensure no repeated job entries
+- Job data normalization adn enrichment
+- Skill extraction and categorization
+- Salary standardization
+- Location data processing
+
+### 3.Analytics Layer
+- REST API for data access
+- Interactive dashboard
+- Real-time filtering and analysis
+
+## Technology Stack
+-------------------------
+### Backend
+- FastAPI: REST API with async support
+- PostgreSQL: Primary database
+- SQLAlchemy: ORM for database operations
+- Pydantic: Data validation and settings management
+
+### Data Pipeline
+- Apache Airflow: Workflow orchestration
+- Docker: Containerization
+- Playwright: Web scrapign with browser automation
+- FlareSolverr: Anti-bot bypass solution
+
+### Frontend
+- Streamlit: Interactive dashboard
+- Plotly: Data visualization
+- Pandas: Data manipulation
+- Leaflet: Geographic visualization 
+
+
