@@ -18,60 +18,38 @@ def fetch_status_analytics():
         return None
 
 
-def convert_to_calendar_events(status_data):
+def convert_to_calendar_events(status_events):
+    # First, group events by date and status
+    grouped_events = {}
+    for event in status_events:
+        date = event['date']
+        status = event['status']
+        key = (date, status)
+
+        if key not in grouped_events:
+            grouped_events[key] = {
+                'count': event['count'],
+                'event_time': event['event_time'],
+                'status': status,
+                'date': date
+            }
+        else:
+            grouped_events[key]['count'] += event['count']
+
+    # Convert grouped events to calendar events
     events = []
-    for item in status_data:
-        updated_at = item['updated_at']
-        if updated_at:
-            if item['new'] > 0:
-                events.append({
-                    "title": f"New: {item['new']}",
-                    "start": updated_at,
-                    "allDay": False,
-                    "color": "#FFFFFF"
-                })
-            if item['applied'] > 0:
-                events.append({
-                    "title": f"Applied: {item['applied']}",
-                    "start": updated_at,
-                    "allDay": False,
-                    "color": "#FF9800"
-                })
-            if item['phone_screen'] > 0:
-                events.append({
-                    "title": f"Phone Screen: {item['phone_screen']}",
-                    "start": updated_at,
-                    "allDay": False,
-                    "color": "#FFC107"
-                })
-            if item['technical'] > 0:
-                events.append({
-                    "title": f"Technical: {item['technical']}",
-                    "start": updated_at,
-                    "allDay": False,
-                    "color": "#8BC34A"
-                })
-            if item['onsite'] > 0:
-                events.append({
-                    "title": f"Onsite: {item['onsite']}",
-                    "start": updated_at,
-                    "allDay": False,
-                    "color": "#2196F3"
-                })
-            if item['offer'] > 0:
-                events.append({
-                    "title": f"Offer: {item['offer']}",
-                    "start": updated_at,
-                    "allDay": False,
-                    "color": "#AB47BC"
-                })
-            if item['rejected'] > 0:
-                events.append({
-                    "title": f"Rejected: {item['rejected']}",
-                    "start": updated_at,
-                    "allDay": False,
-                    "color": "#F44336"
-                })
+    for (date, status), event_data in grouped_events.items():
+        if event_data['count'] > 0:
+            events.append({
+                "title": f"{status}: {event_data['count']}",
+                "start": event_data['event_time'],
+                "allDay": False,
+                "color": get_status_color(status.lower()),
+                "extendedProps": {
+                    "status": status,
+                    "date": date
+                }
+            })
     return events
 
 
@@ -89,11 +67,14 @@ def get_status_color(status):
     }
     return colors.get(status, "#FFFFFF")
 
-def fetch_day_details(date_str):
+def fetch_day_details(date_str, status=None):
     try:
         # Parse the full timestamp and extract just the date part
         date = datetime.fromisoformat(date_str).strftime("%Y-%m-%d")
-        response = requests.get(f"{API_BASE_URL}/jobs/status-analytics/day/{date}")
+        url = f"{API_BASE_URL}/jobs/status-analytics/day/{date}"
+        if status:
+            url += f"?status={status}"
+        response = requests.get(url)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
@@ -109,6 +90,7 @@ def fetch_job_details(job_id):
     except requests.exceptions.RequestException as e:
         st.error(f"Error fetching job details: {str(e)}")
         return None
+
 
 def main():
     st.title("Application Status Timeline")
@@ -126,7 +108,7 @@ def main():
         "initialView": "dayGridMonth",
         "selectable": True,
         "editable": False,
-        "displayEventTime": False  # Hide time in month view
+        "displayEventTime": False
     }
 
     custom_css = """
@@ -152,20 +134,26 @@ def main():
         }
     """
 
-    calendar_events = convert_to_calendar_events(analytics['status_by_date'])
+    calendar_events = convert_to_calendar_events(analytics['status_events'])
     state = calendar(events=calendar_events, options=calendar_options, custom_css=custom_css)
 
     # Handle calendar click events
     if state.get("eventClick"):
-        clicked_date = state["eventClick"]["event"]["start"]
-        details = fetch_day_details(clicked_date)
+        event_data = state["eventClick"]["event"]
+        clicked_date = event_data["start"]
+        status = event_data["extendedProps"]["status"]
+
+        details = fetch_day_details(clicked_date, status)
 
         if details:
-            st.header(f"Updates on {clicked_date}")
+            st.header(f"{status} Updates on {event_data['extendedProps']['date']}")
             for job in details:
                 with st.expander(f"{job['title']} at {job['company']}"):
                     st.write(f"Status: {job['status']}")
-                    st.write(f"Updated at: {job['updated_at']}")
+                    if status == "NEW":
+                        st.write(f"Created at: {job['created_at']}")
+                    else:
+                        st.write(f"Updated at: {job['updated_at']}")
                     if job.get('url'):
                         st.write(f"[View Job]({job['url']})")
 

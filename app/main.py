@@ -1,10 +1,15 @@
 # app/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-# from app.api.v1.endpoints import router as job_router
 from app.api.v2.endpoints import router as job_router
 from app.models import job
 from app.database import engine  # Add this import
+
+# # Drop all tables
+# job.Base.metadata.drop_all(bind=engine)
+#
+# Create all tables
+job.Base.metadata.create_all(bind=engine)
 
 
 app = FastAPI()

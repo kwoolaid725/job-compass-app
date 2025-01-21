@@ -62,6 +62,7 @@ class LinkedInScraper:
                 return
 
             for start in range(0, self.max_pages * 25, 25):
+            # for start in range(400, self.max_pages * 25, 25):
                 page_url = f"{self.user_input.url}&start={start}"
                 self.logger.info(f"🔍 Processing page: {start // 25 + 1}")
 
@@ -122,7 +123,7 @@ class LinkedInScraper:
                     self.jobs_processed += 1
                     self.logger.info(f"✅ Saved job {self.jobs_processed}: {job_url}")
                 else:
-                    self.logger.error(f"⚠️ Failed to save job: {job_url}")
+                    self.logger.error(f"⚠️ Faƒiled to save job: {job_url}")
 
         except Exception as e:
             self.logger.error(f"❌ Error processing job {job_url}: {e}")
@@ -165,11 +166,17 @@ class LinkedInScraper:
 
             # Wait for navigation and check for success
             try:
-                page.wait_for_selector(".feed-identity-module", timeout=10000)
-                print("✅ Successfully logged in to LinkedIn")
-                return True
-            except:
-                print("❌ Login might have failed - check for verification")
+                # Check for successful login OR verification page
+                success = False
+                for _ in range(60):  # 60 seconds total
+                    if page.query_selector(".feed-identity-module"):
+                        print("✅ Successfully logged in to LinkedIn")
+                        success = True
+                        break
+                    time.sleep(1)
+                return success
+            except Exception as e:
+                print(f"⚠️ Login verification timeout: {e}")
                 return False
 
         except Exception as e:
@@ -286,8 +293,6 @@ class LinkedInScraper:
             print(f"❌ Error extracting job links: {e}")
             return []
 
-
-
     def get_job_details(self, page, job_url):
         """Extract details from individual job posting."""
         try:
@@ -316,8 +321,19 @@ class LinkedInScraper:
             if primary_desc:
                 job_insights.append(primary_desc.inner_text())
 
+            # Add pills extraction
+            pills = page.query_selector_all(".job-details-preferences-and-skills__pill")
+            print("pills", pills)
+            for pill in pills:
+                span = pill.query_selector(".ui-label")
+                if span:
+                    text = span.inner_text().strip()
+                    if text and not text.startswith('0 of') and 'skills match' not in text:
+                        job_insights.append(text)
+
             # Additional sections
-            segment_cards = page.query_selector_all(".artdeco-card.job-details-segment-attribute-card-job-details, .artdeco-card.job-details-module")
+            segment_cards = page.query_selector_all(
+                ".artdeco-card.job-details-segment-attribute-card-job-details, .artdeco-card.job-details-module")
             details_modules = page.query_selector_all(".artdeco-card.job-details-module")
             skills_items = page.query_selector_all(".job-details-how-you-match__skills-item-wrapper")
 
@@ -330,7 +346,7 @@ class LinkedInScraper:
                 "company": company_elem.inner_text() if company_elem else None,
                 "location_raw": location_elem.inner_text() if location_elem else None,
                 "description": description_elem.inner_text() if description_elem else None,
-                "job_insight": job_insights,  # Now includes both types of insights
+                "job_insight": job_insights,  # Now includes both insights and pills
                 "segment_cards": segment_content,
                 "details_modules": module_content,
                 "skills": skills_content,
