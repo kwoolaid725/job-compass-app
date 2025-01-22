@@ -53,11 +53,11 @@ flowchart TB
     endpoints --> calendar
     endpoints --> maps
     
-    classDef source fill:#e3f2fd,stroke:#1565c0,stroke-width:3px
-    classDef infra fill:#ffebee,stroke:#d32f2f,stroke-width:3px
-    classDef api fill:#e8f5e9,stroke:#388e3c,stroke-width:3px
-    classDef frontend fill:#fff3e0,stroke:#f57c00,stroke-width:3px
-    classDef airflow fill:#e1f5fe,stroke:#03a9f4,stroke-width:3px
+    classDef source fill:#e3f2fd,stroke:#1565c0,stroke-width:3px,color:#003049
+    classDef infra fill:#ffebee,stroke:#d32f2f,stroke-width:3px,color:#003049
+    classDef api fill:#e8f5e9,stroke:#388e3c,stroke-width:3px,color:#003049
+    classDef frontend fill:#fff3e0,stroke:#f57c00,stroke-width:3px,color:#003049
+    classDef airflow fill:#e1f5fe,stroke:#03a9f4,stroke-width:3px,color:#003049
     
     class indeed,linkedin,builtIn source
     class flare,db infra
@@ -69,11 +69,13 @@ flowchart TB
     class postings,analytics,calendar,maps frontend
     
     %% Background colors for subgraphs
-    style DataSources fill:#f0f4f8,stroke:#1565c0,stroke-width:1px
-    style Airflow fill:#e0f7fa,stroke:#00bcd4,stroke-width:1px
-    style Infrastructure fill:#fff3e0,stroke:#ef6c00,stroke-width:1px
-    style API fill:#f3e5f5,stroke:#8e24aa,stroke-width:1px
-    style Frontend fill:#e8eaf6,stroke:#3f51b5,stroke-width:1px
+    style DataSources fill:#f0f4f8,stroke:#1565c0,stroke-width:1px,color:#000000
+    style Airflow fill:#e0f7fa,stroke:#00bcd4,stroke-width:1px,color:#000000
+    style Infrastructure fill:#fff3e0,stroke:#ef6c00,stroke-width:1px,color:#000000
+    style API fill:#f3e5f5,stroke:#8e24aa,stroke-width:1px,color:#000000
+    style Frontend fill:#e8eaf6,stroke:#3f51b5,stroke-width:1px,color:#000000
+    %% Set default link color
+    linkStyle default stroke:#778da9,stroke-width:2px
 ```
 
 ### 1. Data Collection Layer
