@@ -42,9 +42,6 @@ def get_job_categories():
     return {"categories": [category.value for category in JobCategory]}
 
 
-# -------------------------------------------------
-# RAW JOB ENDPOINTS
-# -------------------------------------------------
 @router.post("/raw/", response_model=RawJobPostRead, status_code=status.HTTP_201_CREATED)
 def create_raw_job(job: RawJobPostCreate, db: Session = Depends(get_db)):
     """Create a new RawJobPost entry."""
@@ -65,10 +62,6 @@ def read_raw_jobs(
     jobs = db.query(RawJobPost).offset(skip).limit(limit).all()
     return jobs
 
-
-# -------------------------------------------------
-# PROCESSED JOB COUNT
-# -------------------------------------------------
 @router.get("/processed/count", response_model=CountResponse)
 def get_processed_jobs_count(
         status: List[str] = Query(None),
@@ -112,9 +105,6 @@ def get_processed_jobs_count(
     return {"total": total_count}
 
 
-# -------------------------------------------------
-# PROCESSED JOBS LIST
-# -------------------------------------------------
 @router.get("/processed/", response_model=List[ProcessedJobRead])
 def read_processed_jobs(
         skip: int = 0,
@@ -227,9 +217,6 @@ def read_all_processed_jobs(
     except Exception as e:
         raise HTTPException(status_code=500, detail="Internal Server Error.")
 
-# -------------------------------------------------
-# GET A SINGLE PROCESSED JOB
-# -------------------------------------------------
 @router.get("/processed/{job_id}", response_model=ProcessedJobRead)
 def get_processed_job(job_id: int, db: Session = Depends(get_db)):
     """Retrieve a single ProcessedJob by ID."""
@@ -242,9 +229,6 @@ def get_processed_job(job_id: int, db: Session = Depends(get_db)):
     return job
 
 
-# -------------------------------------------------
-# UPDATE A PROCESSED JOB
-# -------------------------------------------------
 @router.put("/processed/{job_id}", response_model=ProcessedJobRead)
 def update_processed_job(job_id: int, job_update: ProcessedJobUpdate, db: Session = Depends(get_db)):
     """Update an existing ProcessedJob."""
@@ -294,9 +278,6 @@ def update_processed_job(job_id: int, job_update: ProcessedJobUpdate, db: Sessio
     return job
 
 
-# -------------------------------------------------
-# UPDATE JOB STATUS
-# -------------------------------------------------
 @router.put("/processed/{job_id}/status", response_model=ProcessedJobRead)
 def update_job_status(
         job_id: int,
@@ -317,9 +298,6 @@ def update_job_status(
     return job
 
 
-# -------------------------------------------------
-# ANALYTICS
-# -------------------------------------------------
 @router.get("/analytics")
 def get_job_analytics(db: Session = Depends(get_db)):
     """Get analytics for processed jobs: salary distribution, job types, remote statuses."""
@@ -491,10 +469,6 @@ def get_job_sources(db: Session = Depends(get_db)):
     sources = [row[0] for row in sources_query if row[0] is not None]
     return {"sources": sorted(sources)}
 
-
-# -------------------------------
-# Skill Endpoints
-# -------------------------------
 
 @router.post("/skills/", response_model=SkillRead, status_code=status.HTTP_201_CREATED)
 def create_skill(skill: SkillCreate, db: Session = Depends(get_db)):

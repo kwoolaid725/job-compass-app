@@ -15,6 +15,17 @@ class Settings(BaseSettings):
     DATABASE_PORT: int = int(os.getenv('DATABASE_PORT', '5432'))
     DATABASE_NAME: str = os.getenv('DATABASE_NAME')
 
+    # Add new settings
+    OPENAI_API_KEY: str = os.getenv('OPENAI_API_KEY', '')
+    LINKEDIN_EMAIL: str = os.getenv('LINKEDIN_EMAIL', '')
+    LINKEDIN_PASSWORD: str = os.getenv('LINKEDIN_PASSWORD', '')
+    AIRFLOW_USER: str = os.getenv('AIRFLOW_USER', '')
+    AIRFLOW_PASSWORD: str = os.getenv('AIRFLOW_PASSWORD', '')
+    AIRFLOW_SECRET_KEY: str = os.getenv('AIRFLOW_SECRET_KEY', '')
+    UID: str = os.getenv('UID', '')
+    GID: str = os.getenv('GID', '')
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: str = os.getenv('AIRFLOW__DATABASE__SQL_ALCHEMY_CONN', '')
+
     @property
     def DATABASE_URL(self) -> str:
         return (

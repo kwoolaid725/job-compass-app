@@ -52,7 +52,7 @@ flowchart TB
     endpoints --> analytics
     endpoints --> calendar
     endpoints --> maps
-    
+
     classDef source fill:#e3f2fd,stroke:#1565c0,stroke-width:3px,color:#003049
     classDef infra fill:#ffebee,stroke:#d32f2f,stroke-width:3px,color:#003049
     classDef api fill:#e8f5e9,stroke:#388e3c,stroke-width:3px,color:#003049
@@ -69,6 +69,7 @@ flowchart TB
     class postings,analytics,calendar,maps frontend
     
     %% Background colors for subgraphs
+
     style DataSources fill:#f0f4f8,stroke:#1565c0,stroke-width:1px,color:#000000
     style Airflow fill:#e0f7fa,stroke:#00bcd4,stroke-width:1px,color:#000000
     style Infrastructure fill:#fff3e0,stroke:#ef6c00,stroke-width:1px,color:#000000
@@ -114,5 +115,6 @@ flowchart TB
 - Plotly: Data visualization
 - Pandas: Data manipulation
 - Leaflet: Geographic visualization 
+
 
 
