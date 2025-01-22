@@ -1,3 +1,0 @@
-- fix builtinchicago scraper 
-- to get headquarter location and correct geo locatoin
-- 

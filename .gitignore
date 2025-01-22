@@ -65,3 +65,7 @@ output_*.json
 .coverage
 htmlcov/
 .pytest_cache/
+
+# Media files
+*.mov
+*.gif
