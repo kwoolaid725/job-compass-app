@@ -97,7 +97,7 @@ flowchart TB
 - Real-time filtering and analysis
 
 ## Technology Stack
--------------------------
+
 ### Backend
 - FastAPI: REST API with async support
 - PostgreSQL: Primary database
