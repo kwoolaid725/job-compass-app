@@ -5,6 +5,12 @@ A comprehensive data pipeline and analytics platform that automates job posting 
 ## Overview
 Job Compass is an ETL platform that helps job seekers track and analyze job postings. It automatically ingests job listings from multiple sources, processes the data, and provides interactive visualizations and analytics.
 
+<img width="1497" alt="image" src="https://github.com/user-attachments/assets/f6379b9d-ab9a-4fec-9e9a-60e179929c23" />
+<img width="1493" alt="Screenshot 2025-03-28 at 1 04 15 PM" src="https://github.com/user-attachments/assets/9baf3610-03aa-446e-ab6b-1e5707e8b4f8" />
+<img width="1468" alt="Screenshot 2025-03-28 at 1 05 19 PM" src="https://github.com/user-attachments/assets/c0ee9cd0-b289-41a7-974c-de60283b2dcd" />
+
+
+
 ## System Architecture
 ```mermaid
 flowchart TB
